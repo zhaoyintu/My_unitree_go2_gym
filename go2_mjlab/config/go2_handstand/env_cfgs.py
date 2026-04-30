@@ -296,9 +296,9 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
                     "z": (-0.05, 0.1),
-                    # Full rotation init: some envs start near-inverted (pitch≈±π),
-                    # so the policy can discover handstand reward signal.
-                    "pitch": (-3.14, 3.14),
+                    # Wide pitch: ±86° covers past 45° tilt so some envs start
+                    # well past horizontal, providing handstand reward signal.
+                    "pitch": (-1.5, 1.5),
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
@@ -349,18 +349,16 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — strong random forces on trunk for exploration diversity.
-        # IsaacGym uses velocity-based pushes (1 m/s every 8s). Our force-based
-        # pushes need to be stronger to achieve similar exploration. Longer
-        # interval (matching IsaacGym's 8s) prevents NaN from accumulated forces.
+        # Push robot — moderate forces for exploration, less frequent than v11
+        # to reduce physics instability. 2x force, 1/3 frequency vs original.
         "push_robot": EventTermCfg(
             func=envs_mdp.apply_external_force_torque,
             mode="interval",
-            interval_range_s=(4.0, 8.0),
+            interval_range_s=(3.0, 6.0),
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
-                "force_range": (-50.0, 50.0),
-                "torque_range": (-20.0, 20.0),
+                "force_range": (-30.0, 30.0),
+                "torque_range": (-15.0, 15.0),
             },
         ),
     }
