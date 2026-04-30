@@ -298,11 +298,10 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
                     "z": (-0.1, 0.1),
-                    # Bias pitch init toward handstand: all envs start partially
-                    # inverted (57° to 90° forward), giving the policy immediate
-                    # handstand experience. Velocity-based pushes provide the
-                    # exploration signal to maintain balance under perturbation.
-                    "pitch": (1.0, 1.57),
+                    # Match IsaacGym: full pitch range ±90°. Envs near handstand
+                    # survive and provide learning signal; upright envs die via
+                    # base_contact. Velocity pushes provide inter-state exploration.
+                    "pitch": (-1.5, 1.5),
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
@@ -354,22 +353,22 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             },
         ),
         # Push robot — velocity-based (matching IsaacGym). Sets root linear
-        # (±0.5 m/s) and angular (±1.0 rad/s) velocity directly. This is
-        # 10-20x stronger than force-based pushes and can flip the robot
-        # into handstand. Interval ~8s matches IsaacGym push_interval_s.
+        # and angular velocity directly, 10-20x stronger than force-based.
+        # Halved from IsaacGym's ±1.0 to avoid NaN; ang ±0.5 still flips
+        # the robot ~57° in 2s, enough to transition between states.
         "push_robot": EventTermCfg(
             func=envs_mdp.push_by_setting_velocity,
             mode="interval",
-            interval_range_s=(4.0, 8.0),
+            interval_range_s=(6.0, 10.0),
             params={
                 "asset_cfg": SceneEntityCfg("robot"),
                 "velocity_range": {
-                    "x": (-0.5, 0.5),
-                    "y": (-0.5, 0.5),
-                    "z": (-0.5, 0.5),
-                    "roll": (-1.0, 1.0),
-                    "pitch": (-1.0, 1.0),
-                    "yaw": (-1.0, 1.0),
+                    "x": (-0.3, 0.3),
+                    "y": (-0.3, 0.3),
+                    "z": (-0.3, 0.3),
+                    "roll": (-0.5, 0.5),
+                    "pitch": (-0.5, 0.5),
+                    "yaw": (-0.5, 0.5),
                 },
             },
         ),
