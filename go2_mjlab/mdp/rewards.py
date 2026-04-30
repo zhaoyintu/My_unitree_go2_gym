@@ -506,20 +506,20 @@ _HANDSTAND_TRACKING_SIGMA = 0.25
 
 
 def _handstand_quality(env, target_height: float = 0.08) -> torch.Tensor:
-    """Scalar gate: mean base_height reward across all envs.
+    """Per-env handstand quality gate: exp(-|base_z - target| * 5).
 
-    Returns a scalar in [0, 1]. When average handstand quality > 0.70,
-    velocity tracking rewards activate.
+    Returns shape [B]. Each env is gated independently — when an env's
+    quality > 0.70, velocity tracking and shaping rewards activate for
+    that env. This avoids the scalar-mean trap where freshly reset envs
+    (base_z ≈ 0.40) drag down the mean and prevent gating for ALL envs.
 
     Target 0.08 matches the physically achievable equilibrium: with Kp≈40
     and 7kg robot mass, the front thighs sag ~0.17 rad under gravity,
-    dropping the base from ~0.38m (kinematic) to ~0.07-0.09m. The quality
-    gate is achievable within the policy's action range [−1, +1].
+    dropping the base from ~0.38m (kinematic) to ~0.07-0.09m.
     """
     asset: Entity = env.scene["robot"]
     base_z = asset.data.root_link_pos_w[:, 2]
-    base_height_reward = torch.exp(-torch.abs(base_z - target_height) * 5)
-    return torch.mean(base_height_reward)
+    return torch.exp(-torch.abs(base_z - target_height) * 5)
 
 
 def handstand_tracking_lin_vel(
