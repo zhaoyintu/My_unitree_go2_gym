@@ -69,6 +69,29 @@ GO2_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     armature=KNEE_ACTUATOR.reflected_inertia,
 )
 
+# Handstand-specific PD gains: stiffer hip/thigh actuators matching IsaacGym Kp≈40.
+# Higher stiffness gives more aggressive position tracking needed to flip inverted.
+HANDSTAND_NATURAL_FREQ = 100.0  # ~15.9 Hz — matches IsaacGym Kp=40 for hips
+HANDSTAND_STIFFNESS_HIP = HIP_ACTUATOR.reflected_inertia * HANDSTAND_NATURAL_FREQ**2
+HANDSTAND_DAMPING_HIP = (
+    2 * DAMPING_RATIO * HIP_ACTUATOR.reflected_inertia * HANDSTAND_NATURAL_FREQ
+)
+GO2_HANDSTAND_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+    target_names_expr=(".*_hip_joint", ".*_thigh_joint"),
+    stiffness=HANDSTAND_STIFFNESS_HIP,
+    damping=HANDSTAND_DAMPING_HIP,
+    effort_limit=HIP_ACTUATOR.effort_limit,
+    armature=HIP_ACTUATOR.reflected_inertia,
+)
+# Knees keep the standard stiffness (already ~36 Nm/rad, close to IsaacGym's 40)
+GO2_HANDSTAND_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+    target_names_expr=(".*_calf_joint",),
+    stiffness=STIFFNESS_KNEE,
+    damping=DAMPING_KNEE,
+    effort_limit=KNEE_ACTUATOR.effort_limit,
+    armature=KNEE_ACTUATOR.reflected_inertia,
+)
+
 ##
 # Keyframes.
 ##
@@ -143,6 +166,14 @@ GO2_ARTICULATION = EntityArticulationInfoCfg(
     soft_joint_pos_limit_factor=0.9,
 )
 
+GO2_HANDSTAND_ARTICULATION = EntityArticulationInfoCfg(
+    actuators=(
+        GO2_HANDSTAND_HIP_ACTUATOR_CFG,
+        GO2_HANDSTAND_KNEE_ACTUATOR_CFG,
+    ),
+    soft_joint_pos_limit_factor=0.9,
+)
+
 
 def get_go2_robot_cfg() -> EntityCfg:
     """Get a fresh Go2 robot configuration instance.
@@ -161,14 +192,15 @@ def get_go2_robot_cfg() -> EntityCfg:
 def get_go2_handstand_robot_cfg() -> EntityCfg:
     """Get a Go2 robot config tuned for handstand (inverted on front legs).
 
-    Uses higher init position (0.42), different default joint angles:
-    front thighs at 0.8, rear thighs at 1.0, all calves at -1.5.
+    Uses higher init position (0.42), different default joint angles
+    (front thighs at 0.8, rear thighs at 1.0, all calves at -1.5),
+    and stiffer PD gains (Kp≈40 for hip/thigh, matching IsaacGym).
     """
     return EntityCfg(
         init_state=HANDSTAND_INIT_STATE,
         collisions=(FULL_COLLISION,),
         spec_fn=get_spec,
-        articulation=GO2_ARTICULATION,
+        articulation=GO2_HANDSTAND_ARTICULATION,
     )
 
 
@@ -181,6 +213,16 @@ for a in GO2_ARTICULATION.actuators:
     assert e is not None
     for n in names:
         GO2_ACTION_SCALE[n] = 0.25 * e / s
+
+GO2_HANDSTAND_ACTION_SCALE: dict[str, float] = {}
+for a in GO2_HANDSTAND_ARTICULATION.actuators:
+    assert isinstance(a, BuiltinPositionActuatorCfg)
+    e = a.effort_limit
+    s = a.stiffness
+    names = a.target_names_expr
+    assert e is not None
+    for n in names:
+        GO2_HANDSTAND_ACTION_SCALE[n] = 0.25 * e / s
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ command structure, and domain randomization.
 """
 
 from go2_mjlab.robots.go2_constants import (
-    GO2_ACTION_SCALE,
+    GO2_HANDSTAND_ACTION_SCALE,
     get_go2_handstand_robot_cfg,
 )
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -124,7 +124,7 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     actions = {
         "joint_pos": JointPositionActionCfg(
             entity_name="robot", actuator_names=(".*",),
-            scale=GO2_ACTION_SCALE, use_default_offset=True,
+            scale=GO2_HANDSTAND_ACTION_SCALE, use_default_offset=True,
         )
     }
 
@@ -292,6 +292,7 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
                     "z": (-0.05, 0.05),  # small variation around 0.42
+                    "pitch": (-0.5, 0.5),  # random forward tilt for exploration
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
@@ -339,15 +340,18 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — currently disabled due to TorchScript dimension mismatch
-        # in write_root_velocity during interval-triggered pushes.
-        # TODO: fix mjlab event manager env_ids handling for interval mode.
-        # "push_robot": EventTermCfg(
-        #     func=envs_mdp.push_by_setting_velocity,
-        #     mode="interval",
-        #     interval_range_s=(8.0, 8.0),
-        #     params={...},
-        # ),
+        # Push robot — random velocity kicks for exploration (matching IsaacGym push_robots)
+        "push_robot": EventTermCfg(
+            func=envs_mdp.push_by_setting_velocity,
+            mode="interval",
+            interval_range_s=(1.0, 3.0),
+            params={
+                "velocity_range": {
+                    "x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (-0.4, 0.4),
+                    "roll": (-0.52, 0.52), "pitch": (-0.52, 0.52), "yaw": (-0.78, 0.78),
+                },
+            },
+        ),
     }
 
     # Play mode overrides
