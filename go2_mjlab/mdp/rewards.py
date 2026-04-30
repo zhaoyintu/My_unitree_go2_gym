@@ -505,11 +505,15 @@ def flight_height(
 _HANDSTAND_TRACKING_SIGMA = 0.25
 
 
-def _handstand_quality(env, target_height: float = 0.52) -> torch.Tensor:
+def _handstand_quality(env, target_height: float = 0.44) -> torch.Tensor:
     """Scalar gate: mean base_height reward across all envs.
 
     Returns a scalar in [0, 1]. When average handstand quality > 0.70,
     velocity tracking rewards activate.
+
+    Target 0.44 accounts for PD sag under gravity: kinematic equilibrium
+    with thigh=-1.0, calf=-1.1 is ~0.58m, but PD compliance under 7kg
+    load reduces actual base_z to ~0.42-0.45m.
     """
     asset: Entity = env.scene["robot"]
     base_z = asset.data.root_link_pos_w[:, 2]

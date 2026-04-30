@@ -167,7 +167,7 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         ),
         "base_height": RewardTermCfg(
             func=go2_mdp.base_height, weight=1.5,
-            params={"target_height": 0.52},
+            params={"target_height": 0.44},
         ),
         # Velocity tracking (gated by handstand quality > 70%)
         "tracking_lin_vel": RewardTermCfg(
@@ -298,10 +298,12 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
                     "z": (-0.1, 0.1),
-                    # Match IsaacGym: full pitch range ±90°. Envs near handstand
-                    # survive and provide learning signal; upright envs die via
-                    # base_contact. Velocity pushes provide inter-state exploration.
-                    "pitch": (-1.5, 1.5),
+                    # Handstand-focused pitch init: all envs start partially
+                    # inverted (57°-90° forward). With handstand PD defaults,
+                    # the robot collapses immediately at upright pitch. By
+                    # starting all envs near handstand, the policy first learns
+                    # to balance, then explores recovery from perturbations.
+                    "pitch": (1.0, 1.57),
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
@@ -352,24 +354,18 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — velocity-based (matching IsaacGym). Sets root linear
-        # and angular velocity directly, 10-20x stronger than force-based.
-        # Halved from IsaacGym's ±1.0 to avoid NaN; ang ±0.5 still flips
-        # the robot ~57° in 2s, enough to transition between states.
+        # Push robot — gentle force-based perturbation. Velocity-based pushes
+        # (±0.5 rad/s) are 10-20x too strong for a learning policy — they
+        # immediately kill envs (episode length collapses to 0.4s). Force-based
+        # pushes at ±20N provide gentle exploration without destabilizing.
         "push_robot": EventTermCfg(
-            func=envs_mdp.push_by_setting_velocity,
+            func=envs_mdp.apply_external_force_torque,
             mode="interval",
-            interval_range_s=(6.0, 10.0),
+            interval_range_s=(4.0, 8.0),
             params={
-                "asset_cfg": SceneEntityCfg("robot"),
-                "velocity_range": {
-                    "x": (-0.3, 0.3),
-                    "y": (-0.3, 0.3),
-                    "z": (-0.3, 0.3),
-                    "roll": (-0.5, 0.5),
-                    "pitch": (-0.5, 0.5),
-                    "yaw": (-0.5, 0.5),
-                },
+                "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
+                "force_range": (-20.0, 20.0),
+                "torque_range": (-8.0, 8.0),
             },
         ),
     }
