@@ -219,7 +219,7 @@ def unitree_go2_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     )
     cfg.rewards["joint_acceleration"] = RewardTermCfg(
         func=go2_mdp.joint_acceleration,
-        weight=-2.5e-7,
+        weight=-2.5e-4,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     )
 

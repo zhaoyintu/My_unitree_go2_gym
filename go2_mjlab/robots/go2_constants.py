@@ -84,6 +84,23 @@ INIT_STATE = EntityCfg.InitialStateCfg(
     joint_vel={".*": 0.0},
 )
 
+# Handstand-specific init: robot inverted on front legs.
+# Rear thighs more flexed (1.0 vs 0.9), all calves less crouched (-1.5 vs -1.8),
+# and higher starting position (0.42 vs 0.27).
+HANDSTAND_INIT_STATE = EntityCfg.InitialStateCfg(
+    pos=(0.0, 0.0, 0.42),
+    joint_pos={
+        # Specific overrides MUST come before general patterns
+        "RL_thigh_joint": 1.0,
+        "RR_thigh_joint": 1.0,
+        ".*thigh_joint": 0.8,
+        ".*calf_joint": -1.5,
+        ".*R_hip_joint": 0.1,
+        ".*L_hip_joint": -0.1,
+    },
+    joint_vel={".*": 0.0},
+)
+
 ##
 # Collision config.
 ##
@@ -135,6 +152,20 @@ def get_go2_robot_cfg() -> EntityCfg:
     """
     return EntityCfg(
         init_state=INIT_STATE,
+        collisions=(FULL_COLLISION,),
+        spec_fn=get_spec,
+        articulation=GO2_ARTICULATION,
+    )
+
+
+def get_go2_handstand_robot_cfg() -> EntityCfg:
+    """Get a Go2 robot config tuned for handstand (inverted on front legs).
+
+    Uses higher init position (0.42), different default joint angles:
+    front thighs at 0.8, rear thighs at 1.0, all calves at -1.5.
+    """
+    return EntityCfg(
+        init_state=HANDSTAND_INIT_STATE,
         collisions=(FULL_COLLISION,),
         spec_fn=get_spec,
         articulation=GO2_ARTICULATION,

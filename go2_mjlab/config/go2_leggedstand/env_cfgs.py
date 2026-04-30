@@ -117,7 +117,7 @@ def unitree_go2_leggedstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.action_rate_l2, weight=-0.01,
         ),
         "joint_acceleration": RewardTermCfg(
-            func=go2_mdp.joint_acceleration, weight=-2.5e-7,
+            func=go2_mdp.joint_acceleration, weight=-2.5e-4,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
         ),
         "base_contact": RewardTermCfg(

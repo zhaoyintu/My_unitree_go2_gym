@@ -38,7 +38,12 @@ def base_height(
 
 
 class joint_acceleration:
-    """Penalize joint accelerations computed via finite differences."""
+    """Penalize joint accelerations via finite differences (matches IsaacGym formula).
+
+    Unlike IsaacGym which operates on env.dof_vel directly, we go through
+    asset.data.joint_vel. The result (unscaled squared difference, no dt
+    division) matches IsaacGym's _reward_dof_acc exactly.
+    """
 
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
         asset: Entity = env.scene[cfg.params.get("asset_cfg", _DEFAULT_ASSET_CFG).name]
@@ -55,7 +60,7 @@ class joint_acceleration:
     ) -> torch.Tensor:
         asset: Entity = env.scene[asset_cfg.name]
         joint_vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
-        acc = (joint_vel - self.last_joint_vel) / env.step_dt
+        acc = joint_vel - self.last_joint_vel
         self.last_joint_vel = joint_vel.clone()
         return torch.sum(torch.square(acc), dim=1)
 
@@ -480,3 +485,228 @@ def flight_height(
     contact = contact_sensor.data.found > 0
     in_flight = (~contact).all(dim=1).float()
     return torch.exp(-torch.abs(height_error) * 5) * in_flight * 6
+
+
+# ---------------------------------------------------------------------------
+# Handstand velocity tracking rewards
+# ---------------------------------------------------------------------------
+
+# Tracking sigma from IsaacGym go2_handstand config (0.25)
+_HANDSTAND_TRACKING_SIGMA = 0.25
+
+
+def _handstand_quality(env, target_height: float = 0.52) -> torch.Tensor:
+    """Scalar gate: mean base_height reward across all envs.
+
+    Returns a scalar in [0, 1]. When average handstand quality > 0.70,
+    velocity tracking rewards activate.
+    """
+    asset: Entity = env.scene["robot"]
+    base_z = asset.data.root_link_pos_w[:, 2]
+    base_height_reward = torch.exp(-torch.abs(base_z - target_height) * 5)
+    return torch.mean(base_height_reward)
+
+
+def handstand_tracking_lin_vel(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Linear velocity tracking in handstand body frame.
+
+    In handstand: body x = world up, body z = -world x.
+    cmd_x tracks body z-axis velocity, cmd_y tracks body y-axis velocity.
+    Gated by handstand quality > 70%.
+    """
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    lin_vel_b = asset.data.root_link_lin_vel_b  # [B, 3]
+    x_error = torch.square(command[:, 0] + lin_vel_b[:, 2])
+    y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
+    quality = _handstand_quality(env, target_height)
+    return torch.exp(-(x_error + y_error) / tracking_sigma) * (quality > 0.70).float()
+
+
+def handstand_tracking_ang_vel(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Angular velocity tracking in handstand.
+
+    cmd_yaw tracks body x-axis angular velocity.
+    Gated by handstand quality > 70%.
+    """
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    ang_vel_b = asset.data.root_link_ang_vel_b  # [B, 3]
+    ang_vel_error = torch.square(command[:, 2] - ang_vel_b[:, 0])
+    quality = _handstand_quality(env, target_height)
+    return torch.exp(-ang_vel_error / tracking_sigma) * (quality > 0.70).float()
+
+
+def handstand_tracking_lin_vel_zero(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Penalize linear velocity when the command is near zero. Gated by handstand quality."""
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    lin_vel_b = asset.data.root_link_lin_vel_b
+    x_error = torch.square(command[:, 0] + lin_vel_b[:, 2])
+    y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
+    quality = _handstand_quality(env, target_height)
+    cmd_near_zero = (torch.norm(command[:, :2], dim=1) < 0.1).float()
+    return torch.exp(-(x_error + y_error) / tracking_sigma) * (quality > 0.70).float() * cmd_near_zero
+
+
+def handstand_tracking_ang_vel_zero(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Penalize angular velocity when the command is near zero. Gated by handstand quality."""
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    ang_vel_b = asset.data.root_link_ang_vel_b
+    ang_vel_error = torch.square(command[:, 2] - ang_vel_b[:, 0])
+    quality = _handstand_quality(env, target_height)
+    cmd_near_zero = (torch.abs(command[:, 2]) < 0.1).float()
+    return ang_vel_error * (quality > 0.70).float() * cmd_near_zero
+
+
+# ---------------------------------------------------------------------------
+# Handstand shaping rewards
+# ---------------------------------------------------------------------------
+
+
+def handstand_contact(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...],
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Reward exactly one rear foot in contact during handstand. Gated by quality."""
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0  # [B, 4]
+    rear_contact = contact[:, list(foot_indices)]  # rear feet (RL, RR = indices 2, 3)
+    n_contact = torch.sum(rear_contact, dim=1)
+    quality = _handstand_quality(env, target_height)
+    return (n_contact == 1).float() * (quality > 0.70).float()
+
+
+class handstand_feet_air_time:
+    """Reward rear feet (RL, RR) staying in the air during handstand.
+
+    Tracks per-foot air time and rewards on first ground contact.
+    Matches IsaacGym _reward_feet_air_time.
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+        self.foot_indices = cfg.params["foot_indices"]
+        self.num_feet = len(self.foot_indices)
+        self.air_time = torch.zeros(env.num_envs, self.num_feet, device=env.device)
+        self.last_contacts = torch.zeros(env.num_envs, self.num_feet, device=env.device, dtype=torch.bool)
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        sensor_name: str,
+        foot_indices: tuple[int, ...],
+        target_height: float = 0.52,
+    ) -> torch.Tensor:
+        contact_sensor: ContactSensor = env.scene[sensor_name]
+        contact = contact_sensor.data.found > 0  # [B, 4]
+        rear_contact = contact[:, list(foot_indices)]
+
+        contact_filt = torch.logical_or(rear_contact, self.last_contacts)
+        first_contact = (self.air_time > 0.0).float() * contact_filt.float()
+        self.air_time += env.step_dt
+        rew = torch.sum((self.air_time - 0.4) * first_contact, dim=1)
+        self.air_time = self.air_time * (~contact_filt).float()
+
+        self.last_contacts = rear_contact
+        quality = _handstand_quality(env, target_height)
+        return rew * (quality > 0.70).float()
+
+    def reset(self, env_ids: torch.Tensor) -> None:
+        self.air_time[env_ids] = 0.0
+        self.last_contacts[env_ids] = False
+
+
+def handstand_feet_clearance(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    target_foot_height: float = 0.06,
+    cycle_time: float = 1.6,
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Sinusoidal foot clearance reward for front feet during handstand.
+
+    Rewards the two front feet (indices 0, 1: FR, FL) tracking a sinusoidal height
+    target during their swing phase. Gated by handstand quality > 70%.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    site_ids, _ = asset.find_sites(("FR", "FL", "RR", "RL"))
+    feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
+
+    phase = (env.episode_length_buf * env.step_dt) % cycle_time / cycle_time
+    # Front feet swing when stance_phase_0 = False (phase > 0.5)
+    swing_mask = phase > 0.5
+    target = torch.abs(torch.sin(2 * torch.pi * phase)) * target_foot_height
+
+    # Front feet only: indices 0, 1
+    front_feet_z = feet_z[:, :2]
+    rew = torch.exp(-torch.abs(front_feet_z[:, 0] - target) * 10) * swing_mask.float()
+    rew += torch.exp(-torch.abs(front_feet_z[:, 1] - target) * 10) * swing_mask.float()
+
+    quality = _handstand_quality(env, target_height)
+    return rew * (quality > 0.70).float()
+
+
+def handstand_default_pos_reward(
+    env: ManagerBasedRlEnv,
+    desire_joint_angles: list[float],
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    target_height: float = 0.52,
+) -> torch.Tensor:
+    """Exponential reward for matching desired joint angles, front 6 joints only.
+
+    Gated by handstand quality > 70%.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]  # [B, 12]
+    target = torch.tensor(desire_joint_angles, device=env.device, dtype=torch.float32)
+    # Front 6 joints (FR + FL: 3 joints each)
+    front_dev = torch.sum(torch.abs(joint_pos[:, :6] - target[:6]), dim=1)
+    quality = _handstand_quality(env, target_height)
+    return torch.exp(-front_dev) * (quality > 0.70).float()
+
+
+def handstand_torques(
+    env: ManagerBasedRlEnv,
+) -> torch.Tensor:
+    """Penalize total actuator force."""
+    asset: Entity = env.scene["robot"]
+    force = asset.data.actuator_force
+    if force is None:
+        return torch.zeros(env.num_envs, device=env.device)
+    return torch.sum(torch.abs(force), dim=1)
+
+
+def dof_pos_limits(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Penalize joint positions that approach soft limits."""
+    asset: Entity = env.scene[asset_cfg.name]
+    joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]
+    lower = asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids, 0]
+    upper = asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids, 1]
+    out_of_limits = -torch.clamp(joint_pos - lower, max=0.0)
+    out_of_limits += torch.clamp(joint_pos - upper, min=0.0)
+    return torch.sum(out_of_limits, dim=1)
