@@ -214,15 +214,17 @@ for a in GO2_ARTICULATION.actuators:
     for n in names:
         GO2_ACTION_SCALE[n] = 0.25 * e / s
 
-GO2_HANDSTAND_ACTION_SCALE: dict[str, float] = {}
-for a in GO2_HANDSTAND_ARTICULATION.actuators:
-    assert isinstance(a, BuiltinPositionActuatorCfg)
-    e = a.effort_limit
-    s = a.stiffness
-    names = a.target_names_expr
-    assert e is not None
-    for n in names:
-        GO2_HANDSTAND_ACTION_SCALE[n] = 0.25 * e / s
+# Handstand action scale: uniform 0.25 matching IsaacGym's control.action_scale.
+# We do NOT use the formula 0.25 * effort_limit / stiffness because handstand PD
+# gains were increased (Kp≈40) to match IsaacGym. The standard formula would
+# auto-reduce action_scale to ~0.147 (since stiffness increased), cutting torque
+# authority by 41% vs IsaacGym. Uniform 0.25 ensures Kp * action_scale = 10 Nm
+# per unit action, matching IsaacGym exactly.
+GO2_HANDSTAND_ACTION_SCALE: dict[str, float] = {
+    ".*_hip_joint": 0.25,
+    ".*_thigh_joint": 0.25,
+    ".*_calf_joint": 0.25,
+}
 
 
 if __name__ == "__main__":

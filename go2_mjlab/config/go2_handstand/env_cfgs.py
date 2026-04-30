@@ -309,7 +309,10 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.reset_joints_by_offset,
             mode="reset",
             params={
-                "position_range": (-0.15, 0.15),
+                # IsaacGym: default_dof_pos * Uniform(0.5, 1.5) → for thigh@0.8
+                # that's [0.4,1.2] (±0.4), for calf@-1.5 that's [-2.25,-0.75]
+                # (±0.75). Match with ±0.5 additive offset.
+                "position_range": (-0.5, 0.5),
                 "velocity_range": (0.0, 0.0),
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
             },
