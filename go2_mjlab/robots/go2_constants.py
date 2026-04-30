@@ -122,7 +122,7 @@ INIT_STATE = EntityCfg.InitialStateCfg(
 # the inverted body. Rear thighs are tucked up (2.25) out of the way.
 # Base at z=0.55 (near kinematic equilibrium ~0.60m with these angles).
 HANDSTAND_INIT_STATE = EntityCfg.InitialStateCfg(
-    pos=(0.0, 0.0, 0.55),
+    pos=(0.0, 0.0, 0.40),
     joint_pos={
         # Specific overrides MUST come before general patterns
         "RL_thigh_joint": 2.25,

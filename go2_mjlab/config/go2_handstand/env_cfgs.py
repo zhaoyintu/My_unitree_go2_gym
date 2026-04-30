@@ -297,13 +297,14 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             params={
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
-                    "z": (-0.1, 0.1),
-                    # Handstand-focused pitch init: all envs start partially
-                    # inverted (57°-90° forward). With handstand PD defaults,
-                    # the robot collapses immediately at upright pitch. By
-                    # starting all envs near handstand, the policy first learns
-                    # to balance, then explores recovery from perturbations.
-                    "pitch": (1.0, 1.57),
+                    # z: keep feet near ground. Kinematic base-to-foot is ~0.38m
+                    # (pitch 85°), PD sag drops ~0.31m to settle at ~0.07m.
+                    # Init at 0.40 puts feet ~2cm above ground.
+                    "z": (-0.02, 0.02),
+                    # Handstand-focused pitch init: 75°-90° forward. Narrower
+                    # range than before — 57° was collapsing because front legs
+                    # point backward at lower pitch angles.
+                    "pitch": (1.31, 1.57),
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
