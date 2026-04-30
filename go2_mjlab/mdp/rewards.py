@@ -506,20 +506,23 @@ _HANDSTAND_TRACKING_SIGMA = 0.25
 
 
 def _handstand_quality(env, target_height: float = 0.08) -> torch.Tensor:
-    """Per-env handstand quality gate: exp(-|base_z - target| * 5).
+    """Gate always open: return 2.0 so that quality > 0.70 is always true.
 
-    Returns shape [B]. Each env is gated independently — when an env's
-    quality > 0.70, velocity tracking and shaping rewards activate for
-    that env. This avoids the scalar-mean trap where freshly reset envs
-    (base_z ≈ 0.40) drag down the mean and prevent gating for ALL envs.
+    The quality-gating architecture was ported from IsaacGym, where it uses
+    torch.mean() as a scalar gate across all envs. In that setup the gate
+    always opens once the robot can stand at the right height (standing
+    default pose is stable). With handstand PD defaults the robot starts
+    inverted and unstable — the gate only opens for ~2-3% of env-time even
+    after 1000+ iterations, starving the policy of tracking/shaping signal.
 
-    Target 0.08 matches the physically achievable equilibrium: with Kp≈40
-    and 7kg robot mass, the front thighs sag ~0.17 rad under gravity,
-    dropping the base from ~0.38m (kinematic) to ~0.07-0.09m.
+    Removing the gate lets all rewards contribute from step one, matching
+    the effective behavior of IsaacGym where the standing start means most
+    envs pass the gate early. If needed, gating can be re-introduced as a
+    per-env curriculum once basic balance is learned.
     """
     asset: Entity = env.scene["robot"]
     base_z = asset.data.root_link_pos_w[:, 2]
-    return torch.exp(-torch.abs(base_z - target_height) * 5)
+    return torch.full_like(base_z, 2.0)
 
 
 def handstand_tracking_lin_vel(
