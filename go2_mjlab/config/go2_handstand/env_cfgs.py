@@ -226,19 +226,23 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "cycle_time": 1.6,
             },
         ),
-        # Default pose shaping
+        # Default pose shaping — penalize deviation from reachable PD defaults
+        # (NOT from desire angles which may be unreachable with action scale).
+        # MJCF joint order: FR, FL, RL, RR (each: hip, thigh, calf)
         "default_pos": RewardTermCfg(
             func=go2_mdp.default_joint_penalty, weight=-0.1,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
-                    0.0, 0.8, -1.5,    # FR: hip, thigh, calf
-                    0.0, 0.8, -1.5,    # FL: hip, thigh, calf
-                    0.0, 2.25, -1.75,  # RL: hip, thigh, calf
-                    0.0, 2.25, -1.75,  # RR: hip, thigh, calf
+                    0.1, 0.8, -1.5,    # FR: hip, thigh, calf
+                    -0.1, 0.8, -1.5,   # FL: hip, thigh, calf
+                    -0.1, 1.0, -1.5,   # RL: hip, thigh, calf
+                    0.1, 1.0, -1.5,    # RR: hip, thigh, calf
                 ],
             },
         ),
+        # Gated reward: reward matching desire (handstand-specific) joint angles
+        # when handstand quality is high. Desire rear thigh=2.25 (tucked up).
         "default_pos_reward": RewardTermCfg(
             func=go2_mdp.handstand_default_pos_reward, weight=0.5,
             params={
