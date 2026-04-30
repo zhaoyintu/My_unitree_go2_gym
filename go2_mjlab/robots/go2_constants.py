@@ -83,11 +83,17 @@ GO2_HANDSTAND_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     effort_limit=HIP_ACTUATOR.effort_limit,
     armature=HIP_ACTUATOR.reflected_inertia,
 )
-# Knees keep the standard stiffness (already ~36 Nm/rad, close to IsaacGym's 40)
+# Knees: match IsaacGym's uniform Kp=40 for all joints.
+# Compute natural frequency to hit Kp=40: ω = sqrt(40 / reflected_inertia).
+_HANDSTAND_KNEE_NATURAL_FREQ = (40.0 / KNEE_ACTUATOR.reflected_inertia) ** 0.5  # ≈66.5 rad/s
+HANDSTAND_STIFFNESS_KNEE = KNEE_ACTUATOR.reflected_inertia * _HANDSTAND_KNEE_NATURAL_FREQ**2
+HANDSTAND_DAMPING_KNEE = (
+    2 * DAMPING_RATIO * KNEE_ACTUATOR.reflected_inertia * _HANDSTAND_KNEE_NATURAL_FREQ
+)
 GO2_HANDSTAND_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*_calf_joint",),
-    stiffness=STIFFNESS_KNEE,
-    damping=DAMPING_KNEE,
+    stiffness=HANDSTAND_STIFFNESS_KNEE,
+    damping=HANDSTAND_DAMPING_KNEE,
     effort_limit=KNEE_ACTUATOR.effort_limit,
     armature=KNEE_ACTUATOR.reflected_inertia,
 )
