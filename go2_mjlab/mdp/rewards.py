@@ -247,18 +247,26 @@ def lin_vel_x_penalty(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """Penalize body x-axis linear velocity (vertical in handstand)."""
+    """Reward body x-axis linear velocity (vertical pumping in handstand).
+
+    Matches IsaacGym _reward_lin_vel_z: torch.square(base_lin_vel[:, 0]).
+    Despite the name, this is a REWARD for body-x motion — it encourages
+    the dynamic up/down motion needed to maintain handstand balance.
+    """
     asset: Entity = env.scene[asset_cfg.name]
-    return torch.exp(-torch.abs(asset.data.root_link_lin_vel_b[:, 0]) * 10.0)
+    return torch.square(asset.data.root_link_lin_vel_b[:, 0])
 
 
 def ang_vel_xy_penalty(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """Penalize body y/z (pitch/yaw) angular velocity."""
+    """Penalize body roll (x) and pitch (y) angular velocity.
+
+    Matches IsaacGym _reward_ang_vel_xy: exp(-norm(|ang_vel[:, :2]|)).
+    """
     asset: Entity = env.scene[asset_cfg.name]
-    return torch.exp(-torch.norm(torch.abs(asset.data.root_link_ang_vel_b[:, 1:3]), dim=1))
+    return torch.exp(-torch.norm(torch.abs(asset.data.root_link_ang_vel_b[:, :2]), dim=1))
 
 
 def default_joint_penalty(
@@ -317,11 +325,13 @@ def handstand_feet_height(
 
 def ang_xz_penalty(
     env: ManagerBasedRlEnv,
+    target_height: float = 0.52,
 ) -> torch.Tensor:
-    """Penalize roll (x) angular velocity during handstand."""
+    """Penalize roll (x) angular velocity during handstand. Gated by quality."""
     asset: Entity = env.scene["robot"]
     base_ang_vel = asset.data.root_link_ang_vel_b
-    return torch.abs(base_ang_vel[:, 0]) + torch.abs(base_ang_vel[:, 2])
+    quality = _handstand_quality(env, target_height)
+    return (torch.abs(base_ang_vel[:, 0]) + torch.abs(base_ang_vel[:, 2])) * (quality > 0.70).float()
 
 
 def symmetric_joints(
