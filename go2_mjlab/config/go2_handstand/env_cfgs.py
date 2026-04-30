@@ -340,19 +340,19 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — random velocity kicks for exploration (matching IsaacGym push_robots).
-        # is_global_time=True ensures pushes fire based on global sim time, not per-env
-        # episode time, so even short-lived envs get exploration kicks regularly.
+        # Push robot — apply random external forces to the trunk for exploration.
+        # Using apply_external_force_torque (writes to xfrc_applied) instead of
+        # push_by_setting_velocity (writes to root velocity) to avoid a TorchScript
+        # dimension mismatch in write_root_velocity with large env_ids.
         "push_robot": EventTermCfg(
-            func=envs_mdp.push_by_setting_velocity,
+            func=envs_mdp.apply_external_force_torque,
             mode="interval",
             interval_range_s=(1.0, 3.0),
             is_global_time=True,
             params={
-                "velocity_range": {
-                    "x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (-0.4, 0.4),
-                    "roll": (-0.52, 0.52), "pitch": (-0.52, 0.52), "yaw": (-0.78, 0.78),
-                },
+                "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
+                "force_range": (-100.0, 100.0),
+                "torque_range": (-20.0, 20.0),
             },
         ),
     }
