@@ -113,7 +113,7 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     observations = {
         "actor": ObservationGroupCfg(
             terms=actor_terms, concatenate_terms=True, enable_corruption=True,
-            history_length=5,
+            history_length=10,
         ),
         "critic": ObservationGroupCfg(
             terms=critic_terms, concatenate_terms=True, enable_corruption=False,
