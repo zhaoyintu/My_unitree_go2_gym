@@ -298,9 +298,11 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
                     "z": (-0.1, 0.1),
-                    # Wide pitch: ±86° covers past 45° tilt so some envs start
-                    # near handstand with PD defaults holding the inverted pose.
-                    "pitch": (-1.5, 1.5),
+                    # Bias pitch init toward handstand: all envs start partially
+                    # inverted (57° to 90° forward), giving the policy immediate
+                    # handstand experience. Velocity-based pushes provide the
+                    # exploration signal to maintain balance under perturbation.
+                    "pitch": (1.0, 1.57),
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
@@ -351,16 +353,24 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — gentle perturbation for exploration. Forces kept moderate
-        # to avoid NaN; exploration is driven primarily by entropy bonus instead.
+        # Push robot — velocity-based (matching IsaacGym). Sets root linear
+        # (±0.5 m/s) and angular (±1.0 rad/s) velocity directly. This is
+        # 10-20x stronger than force-based pushes and can flip the robot
+        # into handstand. Interval ~8s matches IsaacGym push_interval_s.
         "push_robot": EventTermCfg(
-            func=envs_mdp.apply_external_force_torque,
+            func=envs_mdp.push_by_setting_velocity,
             mode="interval",
-            interval_range_s=(3.0, 6.0),
+            interval_range_s=(4.0, 8.0),
             params={
-                "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
-                "force_range": (-20.0, 20.0),
-                "torque_range": (-8.0, 8.0),
+                "asset_cfg": SceneEntityCfg("robot"),
+                "velocity_range": {
+                    "x": (-0.5, 0.5),
+                    "y": (-0.5, 0.5),
+                    "z": (-0.5, 0.5),
+                    "roll": (-1.0, 1.0),
+                    "pitch": (-1.0, 1.0),
+                    "yaw": (-1.0, 1.0),
+                },
             },
         ),
     }
