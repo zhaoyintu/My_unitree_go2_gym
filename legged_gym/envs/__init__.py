@@ -22,6 +22,12 @@ from legged_gym.envs.GO2_Stand.GO2_Handstand.Go2_handstand_Config import GO2Cfg_
 from legged_gym.envs.GO2_Stand.GO2_Leggedstand.Go2_legstand import Go2_legstand
 from legged_gym.envs.GO2_Stand.GO2_Leggedstand.Go2_legstand_Config import GO2Cfg_Leggedstand,GO2CfgPPO_Leggedstand
 
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand.Lite3_handstand import Lite3_stand
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand.Lite3_handstand_Config import Lite3Cfg_Handstand, Lite3CfgPPO_Handstand
+
+from legged_gym.envs.Lite3_Stand.Lite3_Leggedstand.Lite3_legstand import Lite3_legstand
+from legged_gym.envs.Lite3_Stand.Lite3_Leggedstand.Lite3_legstand_Config import Lite3Cfg_Leggedstand, Lite3CfgPPO_Leggedstand
+
 from legged_gym.utils.task_registry import task_registry
 
 
@@ -32,5 +38,8 @@ task_registry.register( "go2_handstand", Go2_stand, GO2Cfg_Handstand(), GO2CfgPP
 task_registry.register( "go2_leggedstand", Go2_legstand, GO2Cfg_Leggedstand(), GO2CfgPPO_Leggedstand())
 task_registry.register( "go2_spring_jump", GO2_Spring_Jump_Robot, GO2_Spring_Jump_Cfg_Yu(), GO2_Spring_Jump_PPO_Yu())
 task_registry.register( "go2_backflip", Go2_BackFlip, GO2_BackFlip_Cfg_Yu(), GO2_BackFlip_PPO_Yu())
+
+task_registry.register( "lite3_handstand", Lite3_stand, Lite3Cfg_Handstand(), Lite3CfgPPO_Handstand())
+task_registry.register( "lite3_leggedstand", Lite3_legstand, Lite3Cfg_Leggedstand(), Lite3CfgPPO_Leggedstand())
 
 print("注册的任务:  ",task_registry.task_classes)

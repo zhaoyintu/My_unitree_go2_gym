@@ -13,6 +13,8 @@
                 "go2_leggedstand",
                 "go2_spring_jump",
                 "go2_backflip",
+                "lite3_handstand",
+                "lite3_leggedstand",
             ],
             "default": "go2_jump"
         },
