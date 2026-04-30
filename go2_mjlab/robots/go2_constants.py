@@ -69,31 +69,21 @@ GO2_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     armature=KNEE_ACTUATOR.reflected_inertia,
 )
 
-# Handstand-specific PD gains: stiffer hip/thigh actuators matching IsaacGym Kp≈40.
-# Higher stiffness gives more aggressive position tracking needed to flip inverted.
-HANDSTAND_NATURAL_FREQ = 100.0  # ~15.9 Hz — matches IsaacGym Kp=40 for hips
-HANDSTAND_STIFFNESS_HIP = HIP_ACTUATOR.reflected_inertia * HANDSTAND_NATURAL_FREQ**2
-HANDSTAND_DAMPING_HIP = (
-    2 * DAMPING_RATIO * HIP_ACTUATOR.reflected_inertia * HANDSTAND_NATURAL_FREQ
-)
+# Handstand PD gains: match IsaacGym Kp=40, Kd=1.0 for ALL 12 joints.
+# IsaacGym PD: torque = 40 * (default + action*0.25 - q) - 1.0 * qvel
+# We set stiffness and damping directly to match, bypassing the
+# natural-frequency formula used for standard locomotion tasks.
 GO2_HANDSTAND_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*_hip_joint", ".*_thigh_joint"),
-    stiffness=HANDSTAND_STIFFNESS_HIP,
-    damping=HANDSTAND_DAMPING_HIP,
+    stiffness=40.0,
+    damping=1.0,
     effort_limit=HIP_ACTUATOR.effort_limit,
     armature=HIP_ACTUATOR.reflected_inertia,
 )
-# Knees: match IsaacGym's uniform Kp=40 for all joints.
-# Compute natural frequency to hit Kp=40: ω = sqrt(40 / reflected_inertia).
-_HANDSTAND_KNEE_NATURAL_FREQ = (40.0 / KNEE_ACTUATOR.reflected_inertia) ** 0.5  # ≈66.5 rad/s
-HANDSTAND_STIFFNESS_KNEE = KNEE_ACTUATOR.reflected_inertia * _HANDSTAND_KNEE_NATURAL_FREQ**2
-HANDSTAND_DAMPING_KNEE = (
-    2 * DAMPING_RATIO * KNEE_ACTUATOR.reflected_inertia * _HANDSTAND_KNEE_NATURAL_FREQ
-)
 GO2_HANDSTAND_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*_calf_joint",),
-    stiffness=HANDSTAND_STIFFNESS_KNEE,
-    damping=HANDSTAND_DAMPING_KNEE,
+    stiffness=40.0,
+    damping=1.0,
     effort_limit=KNEE_ACTUATOR.effort_limit,
     armature=KNEE_ACTUATOR.reflected_inertia,
 )
