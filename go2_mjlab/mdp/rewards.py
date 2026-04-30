@@ -325,7 +325,7 @@ def handstand_feet_height(
 
 def ang_xz_penalty(
     env: ManagerBasedRlEnv,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Penalize roll (x) angular velocity during handstand. Gated by quality."""
     asset: Entity = env.scene["robot"]
@@ -505,15 +505,16 @@ def flight_height(
 _HANDSTAND_TRACKING_SIGMA = 0.25
 
 
-def _handstand_quality(env, target_height: float = 0.44) -> torch.Tensor:
+def _handstand_quality(env, target_height: float = 0.08) -> torch.Tensor:
     """Scalar gate: mean base_height reward across all envs.
 
     Returns a scalar in [0, 1]. When average handstand quality > 0.70,
     velocity tracking rewards activate.
 
-    Target 0.44 accounts for PD sag under gravity: kinematic equilibrium
-    with thigh=-1.0, calf=-1.1 is ~0.58m, but PD compliance under 7kg
-    load reduces actual base_z to ~0.42-0.45m.
+    Target 0.08 matches the physically achievable equilibrium: with Kp≈40
+    and 7kg robot mass, the front thighs sag ~0.17 rad under gravity,
+    dropping the base from ~0.38m (kinematic) to ~0.07-0.09m. The quality
+    gate is achievable within the policy's action range [−1, +1].
     """
     asset: Entity = env.scene["robot"]
     base_z = asset.data.root_link_pos_w[:, 2]
@@ -525,7 +526,7 @@ def handstand_tracking_lin_vel(
     env: ManagerBasedRlEnv,
     command_name: str,
     tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Linear velocity tracking in handstand body frame.
 
@@ -546,7 +547,7 @@ def handstand_tracking_ang_vel(
     env: ManagerBasedRlEnv,
     command_name: str,
     tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Angular velocity tracking in handstand.
 
@@ -565,7 +566,7 @@ def handstand_tracking_lin_vel_zero(
     env: ManagerBasedRlEnv,
     command_name: str,
     tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Penalize linear velocity when the command is near zero. Gated by handstand quality."""
     asset: Entity = env.scene["robot"]
@@ -581,7 +582,7 @@ def handstand_tracking_lin_vel_zero(
 def handstand_tracking_ang_vel_zero(
     env: ManagerBasedRlEnv,
     command_name: str,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Penalize angular velocity when the command is near zero. Gated by handstand quality."""
     asset: Entity = env.scene["robot"]
@@ -602,7 +603,7 @@ def handstand_contact(
     env: ManagerBasedRlEnv,
     sensor_name: str,
     foot_indices: tuple[int, ...],
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Reward exactly one rear foot in contact during handstand. Gated by quality."""
     contact_sensor: ContactSensor = env.scene[sensor_name]
@@ -631,7 +632,7 @@ class handstand_feet_air_time:
         env: ManagerBasedRlEnv,
         sensor_name: str,
         foot_indices: tuple[int, ...],
-        target_height: float = 0.52,
+        target_height: float = 0.08,
     ) -> torch.Tensor:
         contact_sensor: ContactSensor = env.scene[sensor_name]
         contact = contact_sensor.data.found > 0  # [B, 4]
@@ -657,7 +658,7 @@ def handstand_feet_clearance(
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     target_foot_height: float = 0.06,
     cycle_time: float = 1.6,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Sinusoidal foot clearance reward for front feet during handstand.
 
@@ -686,7 +687,7 @@ def handstand_default_pos_reward(
     env: ManagerBasedRlEnv,
     desire_joint_angles: list[float],
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
-    target_height: float = 0.52,
+    target_height: float = 0.08,
 ) -> torch.Tensor:
     """Exponential reward for matching desired joint angles, front 6 joints only.
 

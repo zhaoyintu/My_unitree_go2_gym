@@ -167,7 +167,7 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         ),
         "base_height": RewardTermCfg(
             func=go2_mdp.base_height, weight=1.5,
-            params={"target_height": 0.44},
+            params={"target_height": 0.08},
         ),
         # Velocity tracking (gated by handstand quality > 70%)
         "tracking_lin_vel": RewardTermCfg(
