@@ -340,17 +340,17 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — random external force/torque on trunk for exploration.
-        # Per-env timer with short interval (0.5-2s) so pushes fire even
-        # during modest 1-2s episodes. As survival improves, more pushes.
+        # Push robot — gentle random forces on trunk for exploration diversity.
+        # Small forces (±15N, about 1 m/s² on 15kg robot) prevent NaN while still
+        # providing useful exploration perturbation. Torques cause angular kicks.
         "push_robot": EventTermCfg(
             func=envs_mdp.apply_external_force_torque,
             mode="interval",
             interval_range_s=(0.5, 2.0),
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
-                "force_range": (-100.0, 100.0),
-                "torque_range": (-30.0, 30.0),
+                "force_range": (-15.0, 15.0),
+                "torque_range": (-5.0, 5.0),
             },
         ),
     }
