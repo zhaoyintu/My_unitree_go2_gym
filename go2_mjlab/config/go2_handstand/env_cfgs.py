@@ -226,32 +226,34 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "cycle_time": 1.6,
             },
         ),
-        # Default pose shaping — penalize deviation from reachable PD defaults
-        # (NOT from desire angles which may be unreachable with action scale).
+        # Default pose shaping — penalize deviation from reachable PD defaults.
+        # These match HANDSTAND_INIT_STATE joint_pos, mapped from IsaacGym:
+        #   IsaacGym calf=1.5 → MJCF calf=-1.1 (slightly flexed from max -0.84)
+        #   IsaacGym calf=-1.75 → MJCF calf=-2.0 (folded)
         # MJCF joint order: FR, FL, RL, RR (each: hip, thigh, calf)
         "default_pos": RewardTermCfg(
             func=go2_mdp.default_joint_penalty, weight=-0.1,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
-                    0.1, 0.8, -1.5,    # FR: hip, thigh, calf
-                    -0.1, 0.8, -1.5,   # FL: hip, thigh, calf
-                    -0.1, 1.0, -1.5,   # RL: hip, thigh, calf
-                    0.1, 1.0, -1.5,    # RR: hip, thigh, calf
+                    0.0, -1.0, -1.1,    # FR: hip, thigh (backward), calf (extended)
+                    0.0, -1.0, -1.1,    # FL: hip, thigh (backward), calf (extended)
+                    0.0, 2.25, -2.0,     # RL: hip, thigh (tucked up), calf (folded)
+                    0.0, 2.25, -2.0,     # RR: hip, thigh (tucked up), calf (folded)
                 ],
             },
         ),
-        # Gated reward: reward matching desire (handstand-specific) joint angles
-        # when handstand quality is high. Desire rear thigh=2.25 (tucked up).
+        # Gated reward: reward matching handstand desire angles when quality high.
+        # Desire rear thigh=2.25 (tucked up), front thigh=-1.0 (backward support).
         "default_pos_reward": RewardTermCfg(
             func=go2_mdp.handstand_default_pos_reward, weight=0.5,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
-                    0.0, 0.8, -1.5,    # FR: hip, thigh, calf
-                    0.0, 0.8, -1.5,    # FL: hip, thigh, calf
-                    0.0, 2.25, -1.75,  # RL: hip, thigh, calf
-                    0.0, 2.25, -1.75,  # RR: hip, thigh, calf
+                    0.0, -1.0, -1.1,    # FR: hip, thigh (backward), calf (extended)
+                    0.0, -1.0, -1.1,    # FL: hip, thigh (backward), calf (extended)
+                    0.0, 2.25, -2.0,     # RL: hip, thigh (tucked up), calf (folded)
+                    0.0, 2.25, -2.0,     # RR: hip, thigh (tucked up), calf (folded)
                 ],
             },
         ),
@@ -295,9 +297,9 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             params={
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
-                    "z": (-0.05, 0.1),
+                    "z": (-0.1, 0.1),
                     # Wide pitch: ±86° covers past 45° tilt so some envs start
-                    # well past horizontal, providing handstand reward signal.
+                    # near handstand with PD defaults holding the inverted pose.
                     "pitch": (-1.5, 1.5),
                     "yaw": (-3.14, 3.14),
                 },
@@ -311,10 +313,10 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.reset_joints_by_offset,
             mode="reset",
             params={
-                # IsaacGym: default_dof_pos * Uniform(0.5, 1.5) → for thigh@0.8
-                # that's [0.4,1.2] (±0.4), for calf@-1.5 that's [-2.25,-0.75]
-                # (±0.75). Match with ±0.5 additive offset.
-                "position_range": (-0.5, 0.5),
+                # IsaacGym: default_dof_pos * Uniform(0.5, 1.5). For front
+                # thigh=-1.0 that's [-1.5,-0.5]. Match with ±0.25 additive
+                # (keeps front calves within joint limit [-2.72, -0.84]).
+                "position_range": (-0.25, 0.25),
                 "velocity_range": (0.0, 0.0),
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
             },
@@ -349,16 +351,16 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — moderate forces for exploration, less frequent than v11
-        # to reduce physics instability. 2x force, 1/3 frequency vs original.
+        # Push robot — gentle perturbation for exploration. Forces kept moderate
+        # to avoid NaN; exploration is driven primarily by entropy bonus instead.
         "push_robot": EventTermCfg(
             func=envs_mdp.apply_external_force_torque,
             mode="interval",
             interval_range_s=(3.0, 6.0),
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
-                "force_range": (-30.0, 30.0),
-                "torque_range": (-15.0, 15.0),
+                "force_range": (-20.0, 20.0),
+                "torque_range": (-8.0, 8.0),
             },
         ),
     }
