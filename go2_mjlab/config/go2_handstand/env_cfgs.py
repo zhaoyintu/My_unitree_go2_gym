@@ -340,11 +340,14 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # Push robot — random velocity kicks for exploration (matching IsaacGym push_robots)
+        # Push robot — random velocity kicks for exploration (matching IsaacGym push_robots).
+        # is_global_time=True ensures pushes fire based on global sim time, not per-env
+        # episode time, so even short-lived envs get exploration kicks regularly.
         "push_robot": EventTermCfg(
             func=envs_mdp.push_by_setting_velocity,
             mode="interval",
             interval_range_s=(1.0, 3.0),
+            is_global_time=True,
             params={
                 "velocity_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (-0.4, 0.4),
