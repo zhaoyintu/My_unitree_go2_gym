@@ -291,8 +291,8 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             params={
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
-                    "z": (-0.05, 0.05),  # small variation around 0.42
-                    "pitch": (-0.5, 0.5),  # random forward tilt for exploration
+                    "z": (-0.05, 0.1),  # init variation: up to 0.52m for tilt clearance
+                    "pitch": (-1.5, 1.5),  # ±86° — some envs start near handstand
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
