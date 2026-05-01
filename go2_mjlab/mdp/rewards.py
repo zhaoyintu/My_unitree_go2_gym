@@ -720,19 +720,20 @@ def handstand_default_pos_reward(
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Exponential reward for matching desire angles on the SWING joints.
+    """Exponential reward for matching desire angles on ALL 12 joints.
 
-    Mjlab joint order is FR, FL, RL, RR (each hip, thigh, calf), so
-    `joint_pos[:, 6:]` = rear 6 joints = the swing legs in the front-paw
-    handstand walk.  Mirrors IsaacGym GO2_Leggedstand `_reward_default_pos_reward`
-    which uses `dof_pos[:, 6:]` (rear in URDF order — same indexing).
+    Front 6 (FR/FL) drive the stance pose (thigh=-0.7, calf=-1.75) so the
+    front legs straighten into a true handstand instead of collapsing into
+    a kneeling pose; rear 6 (RL/RR) drive the swing rest pose
+    (thigh=0.8, calf=-1.5).  Gated on `_handstand_quality` so the bonus
+    only fires once the body is roughly in handstand orientation.
     """
     asset: Entity = env.scene[asset_cfg.name]
     joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]  # [B, 12]
     target = torch.tensor(desire_joint_angles, device=env.device, dtype=torch.float32)
-    swing_dev = torch.sum(torch.abs(joint_pos[:, 6:] - target[6:]), dim=1)
+    dev = torch.sum(torch.abs(joint_pos - target), dim=1)
     quality = _handstand_quality(env, target_height)
-    return torch.exp(-swing_dev) * (quality > 0.70).float()
+    return torch.exp(-dev) * (quality > 0.70).float()
 
 
 def handstand_torques(

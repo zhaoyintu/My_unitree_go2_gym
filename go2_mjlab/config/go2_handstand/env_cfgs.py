@@ -70,6 +70,22 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         secondary=ContactMatch(mode="body", pattern="terrain"),
         fields=("found",), reduce="none", num_slots=1, history_length=4,
     )
+    # Calf (shin) ↔ ground sensor — closes the "kneel on shins" loophole.
+    # Each calf has two cylinder collision geoms (..._collision1 / 2).
+    calf_ground_cfg = ContactSensorCfg(
+        name="calf_ground_touch",
+        primary=ContactMatch(
+            mode="geom", entity="robot",
+            pattern=(
+                "FR_calf_collision1", "FR_calf_collision2",
+                "FL_calf_collision1", "FL_calf_collision2",
+                "RR_calf_collision1", "RR_calf_collision2",
+                "RL_calf_collision1", "RL_calf_collision2",
+            ),
+        ),
+        secondary=ContactMatch(mode="body", pattern="terrain"),
+        fields=("found",), reduce="none", num_slots=1, history_length=4,
+    )
 
     # Observations — includes commands for velocity tracking
     # IsaacGym: 48 dims = lin_vel(3) + ang_vel(3) + gravity(3) + commands(3)
@@ -244,8 +260,11 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         # support body weight (thigh=-0.7, calf=-1.75); swing rear legs rest
         # at thigh=0.8, calf=-1.5 — the reference pose between strides.
         # MJCF joint order: FR, FL, RL, RR (each: hip, thigh, calf).
+        # Strong penalty across all 12 joints — was -0.1, far too weak vs
+        # the +5.0 weight on handstand_feet_height_exp.  At -1.0 the policy
+        # actually has to commit to the descire pose to maximize total reward.
         "default_pos": RewardTermCfg(
-            func=go2_mdp.default_joint_penalty, weight=-0.1,
+            func=go2_mdp.default_joint_penalty, weight=-1.0,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
@@ -256,10 +275,12 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 ],
             },
         ),
-        # Gated reward: encourage the SWING (rear) joints to return to
-        # the descire angles each cycle.  Mirrors IsaacGym `dof_pos[:, 6:]`.
+        # Gated bonus across ALL 12 joints (was rear-6 only) — front legs
+        # also need positive feedback for matching descire (thigh=-0.7,
+        # calf=-1.75) or the policy collapses them to whatever pose still
+        # gets the rear feet up.
         "default_pos_reward": RewardTermCfg(
-            func=go2_mdp.handstand_default_pos_reward, weight=0.5,
+            func=go2_mdp.handstand_default_pos_reward, weight=1.0,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
@@ -270,8 +291,10 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 ],
             },
         ),
+        # Was -0.1; bumped to keep rear hips from converging inward and the
+        # rear feet from crossing each other in the air.
         "default_hip_pos": RewardTermCfg(
-            func=go2_mdp.default_hip_pos, weight=-0.1,
+            func=go2_mdp.default_hip_pos, weight=-0.5,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*hip_joint",))},
         ),
         # Regularization
@@ -290,6 +313,13 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         "thigh_collision": RewardTermCfg(
             func=go2_mdp.body_contact, weight=-1.0,
             params={"sensor_name": "thigh_ground_touch"},
+        ),
+        # Closes the "kneel on shins" loophole: any calf-ground contact
+        # is heavily penalized so the policy must keep the front shin off
+        # the ground (i.e. straighten the front leg into a true handstand).
+        "calf_collision": RewardTermCfg(
+            func=go2_mdp.body_contact, weight=-2.0,
+            params={"sensor_name": "calf_ground_touch"},
         ),
     }
 
@@ -390,7 +420,8 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         scene=SceneCfg(
             terrain=TerrainEntityCfg(terrain_type="plane"),
             entities={"robot": get_go2_handstand_robot_cfg()},
-            sensors=(feet_ground_cfg, trunk_head_ground_cfg, thigh_ground_cfg),
+            sensors=(feet_ground_cfg, trunk_head_ground_cfg,
+                     thigh_ground_cfg, calf_ground_cfg),
             num_envs=4096,
             extent=2.0,
         ),
