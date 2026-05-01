@@ -376,8 +376,9 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.dr.pd_gains,
             params={
                 "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
+                "kp_range": (0.9, 1.1),
+                "kd_range": (0.9, 1.1),
                 "operation": "scale",
-                "ranges": (0.9, 1.1),
             },
         ),
         # Motor strength ±20% — randomizes the torque envelope (effort limit).
@@ -386,8 +387,8 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.dr.effort_limits,
             params={
                 "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
+                "effort_limit_range": (0.8, 1.2),
                 "operation": "scale",
-                "ranges": (0.8, 1.2),
             },
         ),
         # Motor zero offset ±0.035 rad — calibration drift on commanded
@@ -411,15 +412,18 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.dr.encoder_bias,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-                "operation": "add",
-                "ranges": (-0.02, 0.02),
+                "bias_range": (-0.02, 0.02),
             },
         ),
-        # Link mass ×[0.9, 1.1] on thigh + shank bodies (trunk handled by
-        # `base_mass` separately).  Per-leg variation so legs aren't symmetric.
-        "link_mass": EventTermCfg(
+        # Link inertia ×[0.9, 1.1] on thigh + shank bodies — pseudo_inertia
+        # scales BOTH mass and the 2nd-moment tensor (density variation),
+        # which is the physically-consistent way to randomize link mass.
+        # body_mass alone leaves inertia unchanged (mjlab warns about it)
+        # and is only correct for "point payload at COM" — which is what
+        # base_mass below does for trunk.
+        "link_inertia": EventTermCfg(
             mode="startup",
-            func=envs_mdp.dr.body_mass,
+            func=envs_mdp.dr.pseudo_inertia,
             params={
                 "asset_cfg": SceneEntityCfg(
                     "robot",
@@ -428,8 +432,7 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                         "FL_SHANK", "FR_SHANK", "HL_SHANK", "HR_SHANK",
                     ),
                 ),
-                "operation": "scale",
-                "ranges": (0.9, 1.1),
+                "alpha_range": (0.9, 1.1),
             },
         ),
         # TODO: action delay (real-robot control loop ~5-20 ms latency) and
