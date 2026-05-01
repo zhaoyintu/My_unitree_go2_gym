@@ -25,6 +25,9 @@ from legged_gym.envs.GO2_Stand.GO2_Leggedstand.Go2_legstand_Config import GO2Cfg
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand.Lite3_handstand import Lite3_legstand
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand.Lite3_handstand_Config import Lite3Cfg_Leggedstand, Lite3CfgPPO_Leggedstand
 
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Strict.Lite3_handstand_strict import Lite3_legstand_strict
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Strict.Lite3_handstand_strict_Config import Lite3Cfg_LeggedstandStrict, Lite3CfgPPO_LeggedstandStrict
+
 from legged_gym.utils.task_registry import task_registry
 
 
@@ -39,5 +42,8 @@ task_registry.register( "go2_backflip", Go2_BackFlip, GO2_BackFlip_Cfg_Yu(), GO2
 # head down) — same task family as `go2_leggedstand` despite the inverted
 # Go2 naming convention.
 task_registry.register( "lite3_handstand", Lite3_legstand, Lite3Cfg_Leggedstand(), Lite3CfgPPO_Leggedstand())
+# Strict variant: same task with stronger anti-kneeling guards (per-body
+# collision split + 12-joint default_pos_reward) for A/B comparison.
+task_registry.register( "lite3_handstand_strict", Lite3_legstand_strict, Lite3Cfg_LeggedstandStrict(), Lite3CfgPPO_LeggedstandStrict())
 
 print("注册的任务:  ",task_registry.task_classes)
