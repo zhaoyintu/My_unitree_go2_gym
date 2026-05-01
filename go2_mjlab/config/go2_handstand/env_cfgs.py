@@ -1,7 +1,8 @@
 """Unitree Go2 handstand environment configuration.
 
 Robot balances inverted on its front legs, base pointing upward.
-Target projected gravity: (-1, 0, 0) in body frame (body x-axis aligned with world +z).
+Target projected gravity: (+1, 0, 0) in body frame (body x-axis aligned with world -z,
+i.e. head pointing down to the floor; rear/butt pointing up).
 
 Ported from IsaacGym go2_handstand — matches reward scales, termination logic, init state,
 command structure, and domain randomization.
@@ -152,7 +153,7 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         # Handstand quality
         "handstand_orientation": RewardTermCfg(
             func=go2_mdp.handstand_orientation, weight=-1.0,
-            params={"target_gravity": (-1.0, 0.0, 0.0)},
+            params={"target_gravity": (1.0, 0.0, 0.0)},
         ),
         "handstand_feet_on_air": RewardTermCfg(
             func=go2_mdp.handstand_feet_on_air, weight=0.4,
