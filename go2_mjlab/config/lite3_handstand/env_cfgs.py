@@ -371,51 +371,56 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         # ---- Sim-to-real DR (matching legged_gym Lite3PushRecovery) -------
         # PD gain randomization ±10% — mismatch between commanded and actual
         # joint stiffness/damping is one of the largest sim-to-real gaps.
-        "randomize_pd_gains": EventTermCfg(
+        "pd_gains": EventTermCfg(
             mode="startup",
-            func=envs_mdp.randomize_pd_gains,
+            func=envs_mdp.dr.pd_gains,
             params={
-                "kp_range": (0.9, 1.1),
-                "kd_range": (0.9, 1.1),
-                "operation": "scale",
                 "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
+                "operation": "scale",
+                "ranges": (0.9, 1.1),
             },
         ),
         # Motor strength ±20% — randomizes the torque envelope (effort limit).
-        "randomize_motor_strength": EventTermCfg(
+        "motor_strength": EventTermCfg(
             mode="startup",
-            func=envs_mdp.randomize_effort_limits,
+            func=envs_mdp.dr.effort_limits,
             params={
-                "effort_limit_range": (0.8, 1.2),
-                "operation": "scale",
                 "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
+                "operation": "scale",
+                "ranges": (0.8, 1.2),
             },
         ),
-        # Motor zero offset ±0.035 rad — encoder/calibration drift on the
-        # real joint default position.  qpos0 is the keyframe-stored neutral
-        # joint angle; offsetting it shifts the actual zero perceived by PD.
-        "randomize_motor_zero_offset": EventTermCfg(
+        # Motor zero offset ±0.035 rad — calibration drift on commanded
+        # zero (PD reference shifts; physics unaffected, but the policy's
+        # "go to angle 0" actually hits 0 + offset).
+        "motor_zero_offset": EventTermCfg(
             mode="startup",
-            func=envs_mdp.randomize_field,
+            func=envs_mdp.dr.joint_default_pos,
             params={
-                "field": "qpos0",
-                "ranges": (-0.035, 0.035),
+                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "operation": "add",
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    joint_names=(".*HipX_joint", ".*HipY_joint", ".*Knee_joint"),
-                ),
+                "ranges": (-0.035, 0.035),
+            },
+        ),
+        # Encoder bias ±0.02 rad — sensor-side calibration error: the
+        # policy reads `actual_pos + bias` rather than the true joint
+        # angle.  Smaller magnitude than zero_offset since real encoders
+        # are typically more precise than commanded position.
+        "encoder_bias": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.dr.encoder_bias,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+                "operation": "add",
+                "ranges": (-0.02, 0.02),
             },
         ),
         # Link mass ×[0.9, 1.1] on thigh + shank bodies (trunk handled by
         # `base_mass` separately).  Per-leg variation so legs aren't symmetric.
-        "randomize_link_mass": EventTermCfg(
+        "link_mass": EventTermCfg(
             mode="startup",
-            func=envs_mdp.randomize_field,
+            func=envs_mdp.dr.body_mass,
             params={
-                "field": "body_mass",
-                "ranges": (0.9, 1.1),
-                "operation": "scale",
                 "asset_cfg": SceneEntityCfg(
                     "robot",
                     body_names=(
@@ -423,6 +428,8 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                         "FL_SHANK", "FR_SHANK", "HL_SHANK", "HR_SHANK",
                     ),
                 ),
+                "operation": "scale",
+                "ranges": (0.9, 1.1),
             },
         ),
         # TODO: action delay (real-robot control loop ~5-20 ms latency) and
