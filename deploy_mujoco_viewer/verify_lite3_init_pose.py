@@ -37,7 +37,10 @@ INIT_JOINT_POS = np.array([
     -0.1, -0.8, 1.6,   # HR
 ])
 INIT_BASE_Z = 0.30      # HANDSTAND_INIT_STATE.pos.z
-KP = 40.0
+# Kp = 30 matches lite3_constants.py::LITE3_HANDSTAND_*_ACTUATOR_CFG
+# (lowered from 40 → 30 to absorb reset-perturbation transients on the
+# lighter Lite3 chassis, and to align with the real-robot deploy value).
+KP = 30.0
 KV = 1.0
 EFFORT = 30.0
 
