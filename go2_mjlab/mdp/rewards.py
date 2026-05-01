@@ -134,11 +134,18 @@ def default_hip_pos(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """Penalize hip abduction deviation from zero (keep hips centered)."""
+    """Penalize hip abduction deviation from zero (keep hips centered).
+
+    Case-insensitive match on "hip" so this works for both Go2
+    (`*_hip_joint`) and Lite3 (`*_HipX_joint`).  Callers should still
+    pass an `asset_cfg.joint_names` regex that selects ONLY the
+    abduction joints — for Lite3 this means `.*HipX_joint`, otherwise
+    the HipY (= thigh) joint would also pass the lowercase substring.
+    """
     asset: Entity = env.scene[asset_cfg.name]
     _, joint_names = asset.find_joints(asset_cfg.joint_names)
     hip_mask = torch.tensor(
-        ["hip" in name for name in joint_names],
+        ["hip" in name.lower() for name in joint_names],
         device=env.device,
         dtype=torch.float32,
     )
