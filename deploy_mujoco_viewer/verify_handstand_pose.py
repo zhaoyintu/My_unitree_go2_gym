@@ -30,23 +30,22 @@ JOINT_NAMES = [
     "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
 ]
 
-# Front legs reach forward-down to support body; rear legs tucked up.
-# These are the same defaults already in HANDSTAND_INIT_STATE — the only
-# thing that has to change for "前腿撑地" is the body orientation (pitch=+π/2,
-# head DOWN), not the joint angles.
+# Desired stance pose during handstand walking — IsaacGym GO2_Leggedstand
+# `descire_joint_angles` mapped to mjlab joint order (FR, FL, RL, RR).
+# Front legs reach forward-down (stance), rear legs sit at neutral rest
+# pose between strides.
 TARGET_JOINT_POS = np.array([
-    0.0, -1.0, -1.1,    # FR  (front, support)
-    0.0, -1.0, -1.1,    # FL  (front, support)
-    0.0,  2.25, -2.0,   # RL  (rear, tucked)
-    0.0,  2.25, -2.0,   # RR  (rear, tucked)
+    0.0, -0.7, -1.75,   # FR  stance, reaches forward-down
+    0.0, -0.7, -1.75,   # FL  stance, reaches forward-down
+    0.0,  0.8, -1.5,    # RL  swing, neutral rest pose
+    0.0,  0.8, -1.5,    # RR  swing, neutral rest pose
 ])
 
 # Body vertical, head DOWN.  Pitch = +π/2 about world +y rotates body +x to
-# world -z (head pointing into the floor).  This is what "前腿在地面，身体
-# 直立" really means.
+# world -z (head pointing into the floor).
 INIT_PITCH = np.pi / 2
-# Body height tuned so front feet rest at z≈0 with the joint defaults above.
-INIT_BASE_Z = 0.555
+# Body height — IsaacGym GO2_Leggedstand `base_height_target = 0.47`.
+INIT_BASE_Z = 0.47
 
 KP = np.full(12, 40.0)
 KV = np.full(12, 1.0)

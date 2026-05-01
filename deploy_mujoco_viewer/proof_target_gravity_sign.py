@@ -51,10 +51,10 @@ def main():
 
     cases = [
         # (label, pitch, base_z, target_gravity_for_this_pose)
-        ("A. 头朝下 (docstring 描述: 'balances on front legs')",
-            +np.pi / 2,  0.555, (+1, 0, 0)),
-        ("B. 头朝上 (env_cfgs.py 当前 target_gravity 对应的姿态)",
-            -np.pi / 2,  0.555, (-1, 0, 0)),
+        ("A. 头朝下 (env_cfgs.py target_gravity = (+1, 0, 0)，前腿撑地)",
+            +np.pi / 2,  0.47, (+1, 0, 0)),
+        ("B. 头朝上 (反向 target_gravity = (-1, 0, 0)，后腿撑地)",
+            -np.pi / 2,  0.47, (-1, 0, 0)),
     ]
 
     rows = []
@@ -66,8 +66,9 @@ def main():
         rows.append((label, pitch, grav_b, tg, fz))
 
     print("=" * 78)
-    print("  关节默认角全部一致（front thigh=-1, calf=-1.1; rear thigh=2.25, calf=-2.0）")
-    print("  trunk 起始 z 也一致 (0.555 m)，唯一变量就是 base 的 pitch")
+    print("  关节默认角 = IsaacGym GO2_Leggedstand descire (front thigh=-0.7, calf=-1.75;")
+    print("                                            rear thigh=0.8,  calf=-1.5)")
+    print("  trunk 起始 z 也一致 (0.47 m)，唯一变量就是 base 的 pitch")
     print("=" * 78)
     for label, pitch, grav_b, tg, fz in rows:
         print(f"\n{label}")
@@ -86,31 +87,21 @@ def main():
     rear_on_ground_B = max(abs(fz_B["RL"]), abs(fz_B["RR"])) < 0.05
 
     print("\n" + "=" * 78)
-    print("  结论 — env 配置自相矛盾")
+    print("  结论 — 当前 env 配置 vs 反向 target_gravity")
     print("=" * 78)
-    print(f"  A 头朝下 (pitch=+90°):")
+    print(f"  A 头朝下 (pitch=+90°)  ← 当前 target_gravity=(+1, 0, 0):")
     print(f"     前脚 z = {fz_A['FR']:+.3f}   后脚 z = {fz_A['RL']:+.3f}")
-    print(f"     ⇒ 前脚刚好落地 {'✓' if front_on_ground_A else '✗'}, 后脚高高翘起 — "
-          f"是合理的'前腿撑地' handstand。")
+    print(f"     ⇒ 前脚{'落地 ✓' if front_on_ground_A else '没落地 ✗'}，"
+          f"后脚高高翘到 {fz_A['RL']:.2f} m — 真前腿撑地 handstand。")
     print()
-    print(f"  B 头朝上 (pitch=-90°):")
+    print(f"  B 头朝上 (pitch=-90°)  ← 反向 target_gravity=(-1, 0, 0):")
     print(f"     前脚 z = {fz_B['FR']:+.3f}   后脚 z = {fz_B['RL']:+.3f}")
-    print(f"     ⇒ 没有任何一只脚落地 ✗，前后脚都悬空（前脚 1.1m 高，后脚 0.14m 高）。")
-    print(f"     这个朝向下 handstand 默认关节角根本不合理，")
-    print(f"     说明 HANDSTAND_INIT_STATE 是为 A（头朝下）设计的，不是 B。")
+    print(f"     ⇒ 同一组关节角在头朝上时前后脚都悬空，没法支撑——"
+          f"说明这组关节默认角是为 A 设计的。")
     print()
-    print("  现在的训练配置是这样组合的：")
-    print("     • HANDSTAND_INIT_STATE 关节默认角  →  服务于 A（头朝下，前腿撑地）")
-    print("     • pose_range['pitch']=(1.31,1.57)  →  也是 A（pitch≈+90°）")
-    print("     • 但 target_gravity=(-1,0,0)        →  是 B（头朝上）")
-    print()
-    print("  reward 跟 init pose / joint defaults 方向相反，policy 的训练目标本身")
-    print("  就是矛盾的。这就是为什么 deploy 出来'坐着站起来'——policy 学到的是某种")
-    print("  在两个矛盾目标之间凑合的姿态，既不是真 handstand 也不是稳定站立。")
-    print()
-    print("  修复方法（把 reward 反过来对齐已有的 init pose 设计）：")
-    print("     env_cfgs.py L155:")
-    print("         target_gravity = (-1.0, 0.0, 0.0)  →  (+1.0, 0.0, 0.0)")
+    print("  目前 env_cfgs.py / go2_constants.py 的所有方向（init pose、descire")
+    print("  关节角、pose_range、target_gravity (+1,0,0)、stance/swing 脚分组）")
+    print("  全部对齐到 A（头朝下，前腿撑地，对应 IsaacGym GO2_Leggedstand）。")
     print("=" * 78)
 
 

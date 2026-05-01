@@ -1,11 +1,17 @@
-"""Unitree Go2 handstand environment configuration.
+"""Unitree Go2 front-paw handstand-walking environment.
 
-Robot balances inverted on its front legs, base pointing upward.
-Target projected gravity: (+1, 0, 0) in body frame (body x-axis aligned with world -z,
-i.e. head pointing down to the floor; rear/butt pointing up).
+Trains the dog to balance and walk on its FRONT paws (head pointing down,
+rear legs swing alternately overhead).  Body +x ends up aligned with
+world -z, so target projected gravity in the body frame is (+1, 0, 0).
 
-Ported from IsaacGym go2_handstand — matches reward scales, termination logic, init state,
-command structure, and domain randomization.
+Ported from IsaacGym `legged_gym/envs/GO2_Stand/GO2_Leggedstand` (the
+IsaacGym task whose name is misleading — that file actually trains the
+true handstand-walk).  IsaacGym's `GO2_Handstand` is the rear-leg walk,
+which is NOT what this config targets.
+
+Reward role mapping (foot indices use mjlab order: 0=FR, 1=FL, 2=RR, 3=RL):
+    stance (alternating contact, air-time): foot_indices=(0, 1)  ← FRONT
+    swing  (clearance, air-flag, height target): foot_indices=(2, 3)  ← REAR
 """
 
 from go2_mjlab.robots.go2_constants import (
@@ -157,18 +163,22 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         ),
         "handstand_feet_on_air": RewardTermCfg(
             func=go2_mdp.handstand_feet_on_air, weight=0.4,
-            params={"sensor_name": "feet_ground_contact"},
+            params={
+                "sensor_name": "feet_ground_contact",
+                "foot_indices": (2, 3),   # rear feet should be in the air (swing)
+            },
         ),
         "handstand_feet_height_exp": RewardTermCfg(
             func=go2_mdp.handstand_feet_height, weight=5.0,
             params={
-                "target_height": 0.67,
+                "target_height": 0.67,    # rear feet target world z (IsaacGym Leggedstand)
+                "foot_indices": (2, 3),
                 "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
             },
         ),
         "base_height": RewardTermCfg(
             func=go2_mdp.base_height, weight=1.5,
-            params={"target_height": 0.08},
+            params={"target_height": 0.47},   # IsaacGym GO2_Leggedstand base_height_target
         ),
         # Velocity tracking (gated by handstand quality > 70%)
         "tracking_lin_vel": RewardTermCfg(
@@ -203,58 +213,60 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=go2_mdp.symmetric_joints, weight=-0.1,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
         ),
-        # Contact shaping
+        # Stance shaping — reward exactly one FRONT foot in contact (alternating gait)
         "contact": RewardTermCfg(
             func=go2_mdp.handstand_contact, weight=0.3,
             params={
                 "sensor_name": "feet_ground_contact",
-                "foot_indices": (2, 3),  # RL, RR — rear feet
+                "foot_indices": (0, 1),   # FR, FL — stance feet
             },
         ),
+        # Step-length shaping on the FRONT (stance) feet
         "feet_air_time": RewardTermCfg(
             func=go2_mdp.handstand_feet_air_time, weight=2.0,
             params={
                 "sensor_name": "feet_ground_contact",
-                "foot_indices": (2, 3),  # RL, RR — rear feet
+                "foot_indices": (0, 1),   # FR, FL — stance feet
             },
         ),
-        # Foot clearance (sinusoidal target for front feet)
+        # Sinusoidal swing-clearance for the REAR (swing) feet
         "feet_clearance": RewardTermCfg(
             func=go2_mdp.handstand_feet_clearance, weight=0.4,
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=("trunk",)),
+                "foot_indices": (2, 3),   # RR, RL — swing feet
                 "target_foot_height": 0.06,
                 "cycle_time": 1.6,
             },
         ),
-        # Default pose shaping — penalize deviation from reachable PD defaults.
-        # These match HANDSTAND_INIT_STATE joint_pos, mapped from IsaacGym:
-        #   IsaacGym calf=1.5 → MJCF calf=-1.1 (slightly flexed from max -0.84)
-        #   IsaacGym calf=-1.75 → MJCF calf=-2.0 (folded)
-        # MJCF joint order: FR, FL, RL, RR (each: hip, thigh, calf)
+        # Desire pose during stable handstand walking (IsaacGym GO2_Leggedstand
+        # `descire_joint_angles`).  Stance front legs reach forward-down to
+        # support body weight (thigh=-0.7, calf=-1.75); swing rear legs rest
+        # at thigh=0.8, calf=-1.5 — the reference pose between strides.
+        # MJCF joint order: FR, FL, RL, RR (each: hip, thigh, calf).
         "default_pos": RewardTermCfg(
             func=go2_mdp.default_joint_penalty, weight=-0.1,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
-                    0.0, -1.0, -1.1,    # FR: hip, thigh (backward), calf (extended)
-                    0.0, -1.0, -1.1,    # FL: hip, thigh (backward), calf (extended)
-                    0.0, 2.25, -2.0,     # RL: hip, thigh (tucked up), calf (folded)
-                    0.0, 2.25, -2.0,     # RR: hip, thigh (tucked up), calf (folded)
+                    0.0, -0.7, -1.75,   # FR: stance, reaches forward-down
+                    0.0, -0.7, -1.75,   # FL: stance, reaches forward-down
+                    0.0,  0.8, -1.5,    # RL: swing, neutral rest pose
+                    0.0,  0.8, -1.5,    # RR: swing, neutral rest pose
                 ],
             },
         ),
-        # Gated reward: reward matching handstand desire angles when quality high.
-        # Desire rear thigh=2.25 (tucked up), front thigh=-1.0 (backward support).
+        # Gated reward: encourage the SWING (rear) joints to return to
+        # the descire angles each cycle.  Mirrors IsaacGym `dof_pos[:, 6:]`.
         "default_pos_reward": RewardTermCfg(
             func=go2_mdp.handstand_default_pos_reward, weight=0.5,
             params={
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
                 "desire_joint_angles": [
-                    0.0, -1.0, -1.1,    # FR: hip, thigh (backward), calf (extended)
-                    0.0, -1.0, -1.1,    # FL: hip, thigh (backward), calf (extended)
-                    0.0, 2.25, -2.0,     # RL: hip, thigh (tucked up), calf (folded)
-                    0.0, 2.25, -2.0,     # RR: hip, thigh (tucked up), calf (folded)
+                    0.0, -0.7, -1.75,   # FR
+                    0.0, -0.7, -1.75,   # FL
+                    0.0,  0.8, -1.5,    # RL
+                    0.0,  0.8, -1.5,    # RR
                 ],
             },
         ),
@@ -296,16 +308,11 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.reset_root_state_uniform,
             mode="reset",
             params={
+                # IsaacGym GO2_Leggedstand starts at identity rotation (rot=[0,0,0,1])
+                # — no pitch flip on init.  The policy itself learns to flip up.
                 "pose_range": {
                     "x": (-0.5, 0.5), "y": (-0.5, 0.5),
-                    # z: keep feet near ground. Kinematic base-to-foot is ~0.38m
-                    # (pitch 85°), PD sag drops ~0.31m to settle at ~0.07m.
-                    # Init at 0.40 puts feet ~2cm above ground.
                     "z": (-0.02, 0.02),
-                    # Handstand-focused pitch init: 75°-90° forward. Narrower
-                    # range than before — 57° was collapsing because front legs
-                    # point backward at lower pitch angles.
-                    "pitch": (1.31, 1.57),
                     "yaw": (-3.14, 3.14),
                 },
                 "velocity_range": {
@@ -318,9 +325,8 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=envs_mdp.reset_joints_by_offset,
             mode="reset",
             params={
-                # IsaacGym: default_dof_pos * Uniform(0.5, 1.5). For front
-                # thigh=-1.0 that's [-1.5,-0.5]. Match with ±0.25 additive
-                # (keeps front calves within joint limit [-2.72, -0.84]).
+                # IsaacGym: default_dof_pos * Uniform(0.5, 1.5).  ±0.25 additive
+                # is a comparable spread for the standing-init joint values.
                 "position_range": (-0.25, 0.25),
                 "velocity_range": (0.0, 0.0),
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),

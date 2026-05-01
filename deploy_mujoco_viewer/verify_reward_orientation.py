@@ -77,7 +77,7 @@ def main():
     data = mujoco.MjData(model)
     g_world = np.array([0.0, 0.0, -1.0])
 
-    place(model, data, pitch=+np.pi / 2, base_z=0.555)
+    place(model, data, pitch=+np.pi / 2, base_z=0.47)
     quat = data.qpos[3:7]
     grav_b = quat_rotate_inverse(quat, g_world)
     reward = handstand_orientation_reward(grav_b, target_gravity)
@@ -105,7 +105,7 @@ def main():
         ok = False
 
     # 4. Place at the OLD wrong pose and verify the reward distinguishes them.
-    place(model, data, pitch=-np.pi / 2, base_z=0.555)
+    place(model, data, pitch=-np.pi / 2, base_z=0.47)
     quat = data.qpos[3:7]
     grav_b_wrong = quat_rotate_inverse(quat, g_world)
     reward_wrong = handstand_orientation_reward(grav_b_wrong, target_gravity)

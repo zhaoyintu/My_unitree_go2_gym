@@ -300,26 +300,40 @@ def handstand_orientation(
 def handstand_feet_on_air(
     env: ManagerBasedRlEnv,
     sensor_name: str,
+    foot_indices: tuple[int, ...] = (0, 1, 2, 3),
 ) -> torch.Tensor:
-    """Reward all 4 feet being off the ground."""
+    """Reward selected (swing) feet being off the ground.
+
+    `foot_indices` indexes the contact sensor's foot list (mjlab order:
+    0=FR, 1=FL, 2=RR, 3=RL).  For front-paw handstand walking the swing
+    legs are the rear ones, so pass (2, 3).
+    """
     contact_sensor: ContactSensor = env.scene[sensor_name]
-    contact = contact_sensor.data.found > 0
-    return (~contact).float().prod(dim=1)
+    contact = contact_sensor.data.found > 0  # [B, 4]
+    selected = contact[:, list(foot_indices)]
+    return (~selected).float().prod(dim=1)
 
 
 def handstand_feet_height(
     env: ManagerBasedRlEnv,
     target_height: float,
+    foot_indices: tuple[int, ...] = (2, 3),
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """Reward feet being above the body (headstand height)."""
+    """Reward selected (swing) feet reaching `target_height` in WORLD z.
+
+    Matches IsaacGym GO2_Leggedstand `_reward_handstand_feet_height_exp`,
+    which evaluates `feet_pos[:, :, 2]` of `feet_name_reward` (= rear feet
+    for the front-paw handstand task) against an absolute world-frame
+    target (0.67 m).  `foot_indices` here references the mjlab site list
+    ("FR", "FL", "RR", "RL").
+    """
     asset: Entity = env.scene[asset_cfg.name]
-    trunk_z = asset.data.root_link_pos_w[:, 2]
     foot_site_names = ("FR", "FL", "RR", "RL")
     site_ids, _ = asset.find_sites(foot_site_names)
     feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
-    feet_above_trunk = feet_z - trunk_z.unsqueeze(1)
-    error = torch.abs(feet_above_trunk - target_height).sum(dim=1)
+    selected = feet_z[:, list(foot_indices)]
+    error = torch.abs(selected - target_height).sum(dim=1)
     return torch.exp(-error * 10)
 
 
@@ -531,16 +545,19 @@ def handstand_tracking_lin_vel(
     tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Linear velocity tracking in handstand body frame.
+    """Linear velocity tracking for FRONT-paw handstand walking.
 
-    In handstand: body x = world up, body z = -world x.
-    cmd_x tracks body z-axis velocity, cmd_y tracks body y-axis velocity.
-    Gated by handstand quality > 70%.
+    In this pose body +x = world -z (head DOWN) and body +z = world +x
+    (forward in world).  `imu_lin_vel` returns lin_vel in body frame, so
+    forward-world = lin_vel_b[2].  cmd_x is desired forward speed.
+    Mirrors IsaacGym GO2_Leggedstand `_reward_tracking_lin_vel`:
+        x_error = (cmd_x - lin_vel_b[2])^2
+        y_error = (cmd_y - lin_vel_b[1])^2
     """
     asset: Entity = env.scene["robot"]
     command = env.command_manager.get_command(command_name)
     lin_vel_b = asset.data.root_link_lin_vel_b  # [B, 3]
-    x_error = torch.square(command[:, 0] + lin_vel_b[:, 2])
+    x_error = torch.square(command[:, 0] - lin_vel_b[:, 2])
     y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
     quality = _handstand_quality(env, target_height)
     return torch.exp(-(x_error + y_error) / tracking_sigma) * (quality > 0.70).float()
@@ -552,15 +569,16 @@ def handstand_tracking_ang_vel(
     tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Angular velocity tracking in handstand.
+    """Yaw tracking for FRONT-paw handstand walking.
 
-    cmd_yaw tracks body x-axis angular velocity.
-    Gated by handstand quality > 70%.
+    body +x = world -z (head DOWN), so world yaw rate ω_z = -ang_vel_b[0].
+    Mirrors IsaacGym GO2_Leggedstand `_reward_tracking_ang_vel`:
+        ang_error = (cmd_yaw + ang_vel_b[0])^2
     """
     asset: Entity = env.scene["robot"]
     command = env.command_manager.get_command(command_name)
     ang_vel_b = asset.data.root_link_ang_vel_b  # [B, 3]
-    ang_vel_error = torch.square(command[:, 2] - ang_vel_b[:, 0])
+    ang_vel_error = torch.square(command[:, 2] + ang_vel_b[:, 0])
     quality = _handstand_quality(env, target_height)
     return torch.exp(-ang_vel_error / tracking_sigma) * (quality > 0.70).float()
 
@@ -571,11 +589,11 @@ def handstand_tracking_lin_vel_zero(
     tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Penalize linear velocity when the command is near zero. Gated by handstand quality."""
+    """Penalize linear velocity when the command is near zero (head-down handstand)."""
     asset: Entity = env.scene["robot"]
     command = env.command_manager.get_command(command_name)
     lin_vel_b = asset.data.root_link_lin_vel_b
-    x_error = torch.square(command[:, 0] + lin_vel_b[:, 2])
+    x_error = torch.square(command[:, 0] - lin_vel_b[:, 2])
     y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
     quality = _handstand_quality(env, target_height)
     cmd_near_zero = (torch.norm(command[:, :2], dim=1) < 0.1).float()
@@ -587,11 +605,11 @@ def handstand_tracking_ang_vel_zero(
     command_name: str,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Penalize angular velocity when the command is near zero. Gated by handstand quality."""
+    """Penalize angular velocity when the command is near zero (head-down handstand)."""
     asset: Entity = env.scene["robot"]
     command = env.command_manager.get_command(command_name)
     ang_vel_b = asset.data.root_link_ang_vel_b
-    ang_vel_error = torch.square(command[:, 2] - ang_vel_b[:, 0])
+    ang_vel_error = torch.square(command[:, 2] + ang_vel_b[:, 0])
     quality = _handstand_quality(env, target_height)
     cmd_near_zero = (torch.abs(command[:, 2]) < 0.1).float()
     return ang_vel_error * (quality > 0.70).float() * cmd_near_zero
@@ -608,20 +626,25 @@ def handstand_contact(
     foot_indices: tuple[int, ...],
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Reward exactly one rear foot in contact during handstand. Gated by quality."""
+    """Reward exactly one of the indexed STANCE feet in ground contact.
+
+    Mirrors IsaacGym `_reward_contact` which fires when the alternating
+    stance foot is on the ground.  For front-paw handstand walking the
+    stance feet are FRONT, so pass `foot_indices=(0, 1)`.
+    """
     contact_sensor: ContactSensor = env.scene[sensor_name]
     contact = contact_sensor.data.found > 0  # [B, 4]
-    rear_contact = contact[:, list(foot_indices)]  # rear feet (RL, RR = indices 2, 3)
-    n_contact = torch.sum(rear_contact, dim=1)
+    selected = contact[:, list(foot_indices)]
+    n_contact = torch.sum(selected, dim=1)
     quality = _handstand_quality(env, target_height)
     return (n_contact == 1).float() * (quality > 0.70).float()
 
 
 class handstand_feet_air_time:
-    """Reward rear feet (RL, RR) staying in the air during handstand.
+    """Reward indexed STANCE feet for long air-time → ground-contact strides.
 
-    Tracks per-foot air time and rewards on first ground contact.
-    Matches IsaacGym _reward_feet_air_time.
+    Mirrors IsaacGym `_reward_feet_air_time` (defined on `contact_foot_indices`,
+    which is the FRONT pair for the front-paw handstand walking task).
     """
 
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
@@ -639,15 +662,15 @@ class handstand_feet_air_time:
     ) -> torch.Tensor:
         contact_sensor: ContactSensor = env.scene[sensor_name]
         contact = contact_sensor.data.found > 0  # [B, 4]
-        rear_contact = contact[:, list(foot_indices)]
+        selected = contact[:, list(foot_indices)]
 
-        contact_filt = torch.logical_or(rear_contact, self.last_contacts)
+        contact_filt = torch.logical_or(selected, self.last_contacts)
         first_contact = (self.air_time > 0.0).float() * contact_filt.float()
         self.air_time += env.step_dt
         rew = torch.sum((self.air_time - 0.4) * first_contact, dim=1)
         self.air_time = self.air_time * (~contact_filt).float()
 
-        self.last_contacts = rear_contact
+        self.last_contacts = selected
         quality = _handstand_quality(env, target_height)
         return rew * (quality > 0.70).float()
 
@@ -659,28 +682,33 @@ class handstand_feet_air_time:
 def handstand_feet_clearance(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    foot_indices: tuple[int, ...] = (2, 3),
     target_foot_height: float = 0.06,
     cycle_time: float = 1.6,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Sinusoidal foot clearance reward for front feet during handstand.
+    """Sinusoidal swing-foot clearance reward.
 
-    Rewards the two front feet (indices 0, 1: FR, FL) tracking a sinusoidal height
-    target during their swing phase. Gated by handstand quality > 70%.
+    Mirrors IsaacGym GO2_Leggedstand `_reward_feet_clearance`: rewards the
+    two SWING feet (rear pair for the front-paw handstand walk) tracking
+    a |sin(2π·phase)|·target_foot_height world-z target during the swing
+    half of the gait cycle.  Foot pair is split into "phase-0 swing" and
+    "phase-1 swing" by `swing_mask = (1 - stance_mask)` where stance_mask
+    is `phase < 0.5` for foot 0 and `phase > 0.5` for foot 1.
     """
+    assert len(foot_indices) == 2, "handstand_feet_clearance expects exactly two swing feet"
     asset: Entity = env.scene[asset_cfg.name]
     site_ids, _ = asset.find_sites(("FR", "FL", "RR", "RL"))
     feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
+    swing_z = feet_z[:, list(foot_indices)]  # [B, 2]
 
     phase = (env.episode_length_buf * env.step_dt) % cycle_time / cycle_time
-    # Front feet swing when stance_phase_0 = False (phase > 0.5)
-    swing_mask = phase > 0.5
     target = torch.abs(torch.sin(2 * torch.pi * phase)) * target_foot_height
+    swing_mask_0 = (phase >= 0.5).float()  # foot 0 swings in second half
+    swing_mask_1 = (phase < 0.5).float()   # foot 1 swings in first half
 
-    # Front feet only: indices 0, 1
-    front_feet_z = feet_z[:, :2]
-    rew = torch.exp(-torch.abs(front_feet_z[:, 0] - target) * 10) * swing_mask.float()
-    rew += torch.exp(-torch.abs(front_feet_z[:, 1] - target) * 10) * swing_mask.float()
+    rew = torch.exp(-torch.abs(swing_z[:, 0] - target) * 10) * swing_mask_0
+    rew += torch.exp(-torch.abs(swing_z[:, 1] - target) * 10) * swing_mask_1
 
     quality = _handstand_quality(env, target_height)
     return rew * (quality > 0.70).float()
@@ -692,17 +720,19 @@ def handstand_default_pos_reward(
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Exponential reward for matching desired joint angles, front 6 joints only.
+    """Exponential reward for matching desire angles on the SWING joints.
 
-    Gated by handstand quality > 70%.
+    Mjlab joint order is FR, FL, RL, RR (each hip, thigh, calf), so
+    `joint_pos[:, 6:]` = rear 6 joints = the swing legs in the front-paw
+    handstand walk.  Mirrors IsaacGym GO2_Leggedstand `_reward_default_pos_reward`
+    which uses `dof_pos[:, 6:]` (rear in URDF order — same indexing).
     """
     asset: Entity = env.scene[asset_cfg.name]
     joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]  # [B, 12]
     target = torch.tensor(desire_joint_angles, device=env.device, dtype=torch.float32)
-    # Front 6 joints (FR + FL: 3 joints each)
-    front_dev = torch.sum(torch.abs(joint_pos[:, :6] - target[:6]), dim=1)
+    swing_dev = torch.sum(torch.abs(joint_pos[:, 6:] - target[6:]), dim=1)
     quality = _handstand_quality(env, target_height)
-    return torch.exp(-front_dev) * (quality > 0.70).float()
+    return torch.exp(-swing_dev) * (quality > 0.70).float()
 
 
 def handstand_torques(

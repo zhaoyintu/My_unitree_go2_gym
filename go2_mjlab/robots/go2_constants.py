@@ -103,27 +103,23 @@ INIT_STATE = EntityCfg.InitialStateCfg(
     joint_vel={".*": 0.0},
 )
 
-# Handstand-specific init: robot inverted on front legs.
-# PD defaults mapped from IsaacGym default_dof_pos:
-#   [0,-1,1.5, 0,-1,1.5, 0,2.25,-1.75, 0,2.25,-1.75]
-# IsaacGym calf=1.5 (extended) → MJCF calf=-0.85 (near max extension)
-# IsaacGym calf=-1.75 (folded) → MJCF calf=-2.0 (moderate flexion)
-# Front thighs are NEGATIVE so legs extend backward (body -x), supporting
-# the inverted body. Rear thighs are tucked up (2.25) out of the way.
-# Base at z=0.55 (near kinematic equilibrium ~0.60m with these angles).
+# Handstand init = NORMAL four-paw stand. The dog starts upright; the
+# policy itself learns to flip onto its front paws (head down) and walk.
+# Mirrors IsaacGym GO2_Leggedstand init_state.default_joint_angles
+# (the IsaacGym task that actually trains a front-paw handstand walk):
+#     thigh: front=0.8, rear=1.0
+#     calf:  -1.5 for all
+#     hip:   |0.1| (sign convention follows mjlab MJCF below)
+# Calf and thigh values map 1:1 between IsaacGym URDF and the MJCF —
+# both use range [-2.7227, -0.83776] for the calf with axis (0,1,0).
 HANDSTAND_INIT_STATE = EntityCfg.InitialStateCfg(
-    pos=(0.0, 0.0, 0.40),
+    pos=(0.0, 0.0, 0.42),
     joint_pos={
-        # Specific overrides MUST come before general patterns
-        "RL_thigh_joint": 2.25,
-        "RR_thigh_joint": 2.25,
-        "RL_calf_joint": -2.0,
-        "RR_calf_joint": -2.0,
-        ".*thigh_joint": -1.0,   # FR, FL (backward for handstand support)
-        ".*calf_joint": -1.1,    # FR, FL (extended, equiv to IsaacGym 1.5; -1.1
-                                  #   gives base_z≈0.58, centering quality gate)
-        ".*R_hip_joint": 0.0,
-        ".*L_hip_joint": 0.0,
+        ".*L_hip_joint": -0.1,
+        ".*R_hip_joint": 0.1,
+        "F[LR]_thigh_joint": 0.8,
+        "R[LR]_thigh_joint": 1.0,
+        ".*calf_joint": -1.5,
     },
     joint_vel={".*": 0.0},
 )
