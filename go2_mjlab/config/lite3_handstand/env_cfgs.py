@@ -368,6 +368,69 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
+        # ---- Sim-to-real DR (matching legged_gym Lite3PushRecovery) -------
+        # PD gain randomization ±10% — mismatch between commanded and actual
+        # joint stiffness/damping is one of the largest sim-to-real gaps.
+        "randomize_pd_gains": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.randomize_pd_gains,
+            params={
+                "kp_range": (0.9, 1.1),
+                "kd_range": (0.9, 1.1),
+                "operation": "scale",
+                "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
+            },
+        ),
+        # Motor strength ±20% — randomizes the torque envelope (effort limit).
+        "randomize_motor_strength": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.randomize_effort_limits,
+            params={
+                "effort_limit_range": (0.8, 1.2),
+                "operation": "scale",
+                "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
+            },
+        ),
+        # Motor zero offset ±0.035 rad — encoder/calibration drift on the
+        # real joint default position.  qpos0 is the keyframe-stored neutral
+        # joint angle; offsetting it shifts the actual zero perceived by PD.
+        "randomize_motor_zero_offset": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.randomize_field,
+            params={
+                "field": "qpos0",
+                "ranges": (-0.035, 0.035),
+                "operation": "add",
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    joint_names=(".*HipX_joint", ".*HipY_joint", ".*Knee_joint"),
+                ),
+            },
+        ),
+        # Link mass ×[0.9, 1.1] on thigh + shank bodies (trunk handled by
+        # `base_mass` separately).  Per-leg variation so legs aren't symmetric.
+        "randomize_link_mass": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.randomize_field,
+            params={
+                "field": "body_mass",
+                "ranges": (0.9, 1.1),
+                "operation": "scale",
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    body_names=(
+                        "FL_THIGH", "FR_THIGH", "HL_THIGH", "HR_THIGH",
+                        "FL_SHANK", "FR_SHANK", "HL_SHANK", "HR_SHANK",
+                    ),
+                ),
+            },
+        ),
+        # TODO: action delay (real-robot control loop ~5-20 ms latency) and
+        # ground restitution randomization.  Both are present in legged_gym
+        # Lite3PushRecovery but not in mjlab's stock event API — would need
+        # a custom obs/action buffering wrapper for delay and a custom
+        # geom_solref event for restitution.  Add later if sim-to-real
+        # transfer needs them.
         # Lite3 is lighter than Go2 (5.6 kg vs 12 kg), so the same ±20 N
         # force gives ~2x the acceleration.  Keep magnitudes for now and
         # tune after first training run.
