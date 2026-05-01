@@ -36,12 +36,14 @@ JOINT_NAMES = [
 ]
 
 # HANDSTAND_INIT_STATE.joint_pos resolved per joint name (this is what
-# joint_pos_rel subtracts and what target_q is offset by).
+# joint_pos_rel subtracts and what target_q is offset by). Must match
+# go2_constants.py::HANDSTAND_INIT_STATE — IsaacGym GO2_Leggedstand init
+# (normal four-paw stand; the policy itself learns to flip head-down).
 DEFAULT_JOINT_POS = np.array([
-    0.0, -1.00, -1.10,   # FR
-    0.0, -1.00, -1.10,   # FL
-    0.0,  2.25, -2.00,   # RL
-    0.0,  2.25, -2.00,   # RR
+    +0.1, 0.8, -1.5,   # FR  hip=+0.1 (R-side)
+    -0.1, 0.8, -1.5,   # FL  hip=-0.1 (L-side)
+    -0.1, 1.0, -1.5,   # RL  hip=-0.1 (L-side)
+    +0.1, 1.0, -1.5,   # RR  hip=+0.1 (R-side)
 ], dtype=np.float64)
 
 # PD gains (handstand uses Kp=40, Kd=1.0 for all 12 joints).
@@ -67,13 +69,14 @@ FRAME_STACK = 10
 NUM_OBS = NUM_SINGLE_OBS * FRAME_STACK   # 480
 
 # Sim config: timestep=0.005, decimation=4 → 50 Hz control.
-SIM_DT = 0.001
+SIM_DT = 0.005
 DECIMATION = 4
 CTRL_DT = SIM_DT * DECIMATION
 
-# Initial pose: handstand inverted on front legs (mid of training reset range).
-INIT_BASE_Z = 0.40
-INIT_BASE_PITCH = 1.4   # ≈ 80°
+# Initial pose: matches HANDSTAND_INIT_STATE.pos in go2_constants.py.
+# Dog starts upright on four paws; the policy learns to flip itself.
+INIT_BASE_Z = 0.42
+INIT_BASE_PITCH = 0.0
 
 
 # ---------------------------------------------------------------------------
