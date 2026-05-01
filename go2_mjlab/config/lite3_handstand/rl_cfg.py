@@ -11,14 +11,10 @@ def unitree_lite3_handstand_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
             obs_normalization=True,
             distribution_cfg={
                 "class_name": "GaussianDistribution",
-                # init_std=1.0 caused action_std to drift up to 2.5+ on
-                # Lite3 (policy explores more when no reward gradient
-                # arrives), which combined with action_scale 0.125-0.25
-                # produced ~0.6 rad random joint commands per step —
-                # enough to flip the dog before a single second of
-                # episode time.  0.3 keeps early action magnitude small
-                # so policy can find a foothold.
-                "init_std": 0.3,
+                # init_std=1.0 matches Go2 handstand for the A/B
+                # experiment.  (Previously dropped to 0.3 for Lite3,
+                # which can be re-applied later if needed.)
+                "init_std": 1.0,
                 "std_type": "scalar",
             },
         ),

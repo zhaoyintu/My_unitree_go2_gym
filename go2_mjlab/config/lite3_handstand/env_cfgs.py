@@ -370,73 +370,24 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "ranges": (-0.05, 0.05),
             },
         ),
-        # ---- Sim-to-real DR (matching legged_gym Lite3PushRecovery) -------
-        # PD gain randomization ±10% — mismatch between commanded and actual
-        # joint stiffness/damping is one of the largest sim-to-real gaps.
-        "pd_gains": EventTermCfg(
-            mode="startup",
-            func=envs_mdp.dr.pd_gains,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
-                "kp_range": (0.9, 1.1),
-                "kd_range": (0.9, 1.1),
-                "operation": "scale",
-            },
-        ),
-        # Motor strength ±20% — randomizes the torque envelope (effort limit).
-        "motor_strength": EventTermCfg(
-            mode="startup",
-            func=envs_mdp.dr.effort_limits,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", actuator_names=(".*",)),
-                "effort_limit_range": (0.8, 1.2),
-                "operation": "scale",
-            },
-        ),
-        # Motor zero offset ±0.035 rad — calibration drift on commanded
-        # zero (PD reference shifts; physics unaffected, but the policy's
-        # "go to angle 0" actually hits 0 + offset).
-        "motor_zero_offset": EventTermCfg(
-            mode="startup",
-            func=envs_mdp.dr.joint_default_pos,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-                "operation": "add",
-                "ranges": (-0.035, 0.035),
-            },
-        ),
-        # Encoder bias ±0.02 rad — sensor-side calibration error: the
-        # policy reads `actual_pos + bias` rather than the true joint
-        # angle.  Smaller magnitude than zero_offset since real encoders
-        # are typically more precise than commanded position.
-        "encoder_bias": EventTermCfg(
-            mode="startup",
-            func=envs_mdp.dr.encoder_bias,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-                "bias_range": (-0.02, 0.02),
-            },
-        ),
-        # Link inertia ×[0.9, 1.1] on thigh + shank bodies — pseudo_inertia
-        # scales BOTH mass and the 2nd-moment tensor (density variation),
-        # which is the physically-consistent way to randomize link mass.
-        # body_mass alone leaves inertia unchanged (mjlab warns about it)
-        # and is only correct for "point payload at COM" — which is what
-        # base_mass below does for trunk.
-        "link_inertia": EventTermCfg(
-            mode="startup",
-            func=envs_mdp.dr.pseudo_inertia,
-            params={
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    body_names=(
-                        "FL_THIGH", "FR_THIGH", "HL_THIGH", "HR_THIGH",
-                        "FL_SHANK", "FR_SHANK", "HL_SHANK", "HR_SHANK",
-                    ),
-                ),
-                "alpha_range": (0.9, 1.1),
-            },
-        ),
+        # ---- Sim-to-real DR (DISABLED for A/B experiment) ----------------
+        # The 5 sim-to-real DR events below are temporarily commented out
+        # to test whether they are the cause of alive≈0.03 early-iter
+        # divergence.  Hypothesis: Go2 trained successfully without these,
+        # and Lite3 (lighter/smaller) cannot handle them at iter 0.
+        #
+        # If alive jumps to >0.5 within 1000 iter without these events,
+        # the culprit is confirmed and we'll add them back via a
+        # curriculum that ramps each from no-effect (range=neutral) to
+        # full strength over the first 3000 iter.  If alive stays low,
+        # the bottleneck is elsewhere and we keep hunting.
+        #
+        # Original parameters (restore after experiment):
+        #   pd_gains          : kp_range=(0.9,1.1) kd_range=(0.9,1.1) scale
+        #   motor_strength    : effort_limit_range=(0.8,1.2) scale
+        #   motor_zero_offset : ranges=(-0.035,0.035) add on all joints
+        #   encoder_bias      : bias_range=(-0.02,0.02)
+        #   link_inertia      : alpha_range=(0.9,1.1) on FL/FR/HL/HR_THIGH+_SHANK
         # TODO: action delay (real-robot control loop ~5-20 ms latency) and
         # ground restitution randomization.  Both are present in legged_gym
         # Lite3PushRecovery but not in mjlab's stock event API — would need

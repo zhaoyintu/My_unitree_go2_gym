@@ -100,29 +100,28 @@ LITE3_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     armature=KNEE_ACTUATOR.reflected_inertia,
 )
 
-# Handstand PD: Kp=30 matching deploy_lite3_recovery.py / Lite3Cfg.
-# (Earlier we used Kp=40 to match Go2 handstand, but on the lighter
-# Lite3 the stiffer PD overreacts to reset perturbations and helps
-# fling the dog over before the policy can react.  30 absorbs the
-# initial transient better and matches what the real-robot deploy
-# config uses, easing sim-to-real.)
+# Handstand PD: Kp=40 matching Go2 handstand configuration.
+# (Reverted from Kp=30 for an A/B experiment isolating whether the
+# 5 sim2real DR events are the cause of failed early-iter learning.
+# After the experiment, this can go back to 30 — the lower value
+# matches the real-robot deploy config and may help sim-to-real.)
 LITE3_HANDSTAND_HIPX_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*HipX_joint",),
-    stiffness=30.0,
+    stiffness=40.0,
     damping=1.0,
     effort_limit=HIPX_ACTUATOR.effort_limit,
     armature=HIPX_ACTUATOR.reflected_inertia,
 )
 LITE3_HANDSTAND_HIPY_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*HipY_joint",),
-    stiffness=30.0,
+    stiffness=40.0,
     damping=1.0,
     effort_limit=HIPY_ACTUATOR.effort_limit,
     armature=HIPY_ACTUATOR.reflected_inertia,
 )
 LITE3_HANDSTAND_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     target_names_expr=(".*Knee_joint",),
-    stiffness=30.0,
+    stiffness=40.0,
     damping=1.0,
     effort_limit=KNEE_ACTUATOR.effort_limit,
     armature=KNEE_ACTUATOR.reflected_inertia,
