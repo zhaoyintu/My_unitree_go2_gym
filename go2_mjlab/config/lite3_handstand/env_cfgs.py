@@ -209,6 +209,7 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             params={
                 "target_height": LITE3_REAR_FOOT_TARGET_Z,
                 "foot_indices": (2, 3),
+                "foot_site_names": foot_names,    # Lite3 site naming
                 "asset_cfg": SceneEntityCfg("robot", body_names=("TORSO",)),
             },
         ),
@@ -264,6 +265,7 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=("TORSO",)),
                 "foot_indices": (2, 3),
+                "foot_site_names": foot_names,    # Lite3 site naming
                 "target_foot_height": 0.06,
                 "cycle_time": 1.6,
             },

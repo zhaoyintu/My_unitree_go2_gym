@@ -318,6 +318,7 @@ def handstand_feet_height(
     env: ManagerBasedRlEnv,
     target_height: float,
     foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FR", "FL", "RR", "RL"),
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
     """Reward selected (swing) feet reaching `target_height` in WORLD z.
@@ -325,11 +326,11 @@ def handstand_feet_height(
     Matches IsaacGym GO2_Leggedstand `_reward_handstand_feet_height_exp`,
     which evaluates `feet_pos[:, :, 2]` of `feet_name_reward` (= rear feet
     for the front-paw handstand task) against an absolute world-frame
-    target (0.67 m).  `foot_indices` here references the mjlab site list
-    ("FR", "FL", "RR", "RL").
+    target (0.67 m).  `foot_indices` references positions in
+    `foot_site_names`; default is the Go2 site naming, but other robots
+    (e.g. Lite3 uses "FL", "FR", "HL", "HR") can override.
     """
     asset: Entity = env.scene[asset_cfg.name]
-    foot_site_names = ("FR", "FL", "RR", "RL")
     site_ids, _ = asset.find_sites(foot_site_names)
     feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
     selected = feet_z[:, list(foot_indices)]
@@ -683,6 +684,7 @@ def handstand_feet_clearance(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FR", "FL", "RR", "RL"),
     target_foot_height: float = 0.06,
     cycle_time: float = 1.6,
     target_height: float = 0.08,
@@ -692,13 +694,13 @@ def handstand_feet_clearance(
     Mirrors IsaacGym GO2_Leggedstand `_reward_feet_clearance`: rewards the
     two SWING feet (rear pair for the front-paw handstand walk) tracking
     a |sin(2π·phase)|·target_foot_height world-z target during the swing
-    half of the gait cycle.  Foot pair is split into "phase-0 swing" and
-    "phase-1 swing" by `swing_mask = (1 - stance_mask)` where stance_mask
-    is `phase < 0.5` for foot 0 and `phase > 0.5` for foot 1.
+    half of the gait cycle.  `foot_site_names` must list all four foot
+    sites in the same order used elsewhere in the env (Go2 default
+    "FR/FL/RR/RL"; Lite3 uses "FL/FR/HL/HR").
     """
     assert len(foot_indices) == 2, "handstand_feet_clearance expects exactly two swing feet"
     asset: Entity = env.scene[asset_cfg.name]
-    site_ids, _ = asset.find_sites(("FR", "FL", "RR", "RL"))
+    site_ids, _ = asset.find_sites(foot_site_names)
     feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
     swing_z = feet_z[:, list(foot_indices)]  # [B, 2]
 
