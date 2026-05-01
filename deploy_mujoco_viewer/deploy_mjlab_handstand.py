@@ -116,6 +116,10 @@ class Actor(nn.Module):
 def build_model() -> mujoco.MjModel:
     spec = mujoco.MjSpec.from_file(str(GO2_XML))
 
+    # Bigger offscreen framebuffer so `mujoco.Renderer` can produce 1080p+ frames.
+    spec.visual.global_.offwidth = 1920
+    spec.visual.global_.offheight = 1080
+
     # Skybox + ground texture/material.
     spec.add_texture(
         name="grid",
@@ -194,6 +198,74 @@ def joint_state(model, data) -> tuple[np.ndarray, np.ndarray]:
 
 
 # ---------------------------------------------------------------------------
+# Offscreen video recording (no GUI viewer)
+# ---------------------------------------------------------------------------
+def record_video(model, data, step_once, n_steps: int, args) -> None:
+    """Run the rollout headless and write each control step as a frame to MP4.
+
+    Uses `mujoco.Renderer` for offscreen rendering and `cv2.VideoWriter`
+    (libopencv) for MP4 encoding — no extra binary deps beyond what's
+    already in the conda env.
+    """
+    import cv2
+
+    out_path = Path(args.video).expanduser().resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    renderer = mujoco.Renderer(model, width=args.video_width, height=args.video_height)
+
+    if args.video_camera:
+        camera = args.video_camera   # named MJCF camera
+        update_lookat = lambda: None
+    else:
+        cam = mujoco.MjvCamera()
+        cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+        cam.distance = 1.5
+        cam.elevation = -10.0
+        cam.azimuth = 90.0
+        camera = cam
+        def update_lookat():
+            cam.lookat[:] = data.qpos[:3]
+
+    # cv2 mp4v fourcc + RGB→BGR conversion is the cheapest cross-platform path.
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(
+        str(out_path), fourcc, float(args.video_fps),
+        (args.video_width, args.video_height),
+    )
+    if not writer.isOpened():
+        raise RuntimeError(f"Failed to open MP4 writer for {out_path}")
+
+    # Capture one frame every 1/fps seconds of sim time so the recorded
+    # video plays back in real time, regardless of the inner loop rate.
+    sim_dt_per_frame = 1.0 / args.video_fps
+    next_capture = 0.0
+    n_frames = 0
+
+    print(f"[video] {out_path}  →  {args.video_width}×{args.video_height} @ {args.video_fps} fps")
+    try:
+        for i in range(n_steps):
+            step_once()
+            if data.time + 1e-9 >= next_capture:
+                update_lookat()
+                renderer.update_scene(data, camera=camera)
+                frame_rgb = renderer.render()  # (H, W, 3) uint8
+                writer.write(cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
+                next_capture += sim_dt_per_frame
+                n_frames += 1
+            if (i + 1) % int(round(1.0 / CTRL_DT)) == 0:
+                quat = data.qpos[3:7]
+                grav_b = quat_rotate_inverse(quat, np.array([0.0, 0.0, -1.0]))
+                print(f"  t={data.time:5.2f}s  z={data.qpos[2]:.3f}m  "
+                      f"grav_b_x={grav_b[0]:+.2f}")
+    finally:
+        writer.release()
+        renderer.close()
+    print(f"[video] saved {out_path}  ({n_frames} frames, "
+          f"{n_frames / args.video_fps:.1f}s)")
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 def main():
@@ -210,6 +282,14 @@ def main():
                         help="Run headless without launching a viewer")
     parser.add_argument("--realtime", action="store_true", default=True,
                         help="Pace the loop to wall clock")
+    parser.add_argument("--video", type=str, default=None,
+                        help="Write rollout to this MP4 path (forces headless)")
+    parser.add_argument("--video-fps", type=int, default=50,
+                        help="Video frame rate (default 50 = real-time at training control rate)")
+    parser.add_argument("--video-width", type=int, default=1280)
+    parser.add_argument("--video-height", type=int, default=720)
+    parser.add_argument("--video-camera", type=str, default=None,
+                        help="MJCF <camera> name to render from (default: free camera tracking trunk)")
     args = parser.parse_args()
 
     actor = Actor()
@@ -280,6 +360,10 @@ def main():
             mujoco.mj_step(model, data)
         last_action = action.astype(np.float64)
         push_history()
+
+    if args.video:
+        record_video(model, data, step_once, n_steps, args)
+        return
 
     if args.no_viewer:
         for i in range(n_steps):
