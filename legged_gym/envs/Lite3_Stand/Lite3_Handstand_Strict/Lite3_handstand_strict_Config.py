@@ -1,21 +1,43 @@
-"""Lite3 front-paw handstand with stricter anti-kneeling guards.
+"""Lite3 front-paw handstand — strict variant.
 
-A/B variant of `lite3_handstand` that aligns reward weights with the mjlab
-`Mjlab-Lite3-Handstand` task.  The base task lets the policy converge to a
-"knees on shins" shortcut because:
-  * the combined `collision` term (-1.0) lumps THIGH and SHANK contacts
-    together — SHANK touching ground is the canonical kneeling signal and
-    needs heavier weight than THIGH;
-  * the `default_pos_reward` only tracks the rear 6 joints (`dof_pos[:, 6:]`)
-    so the front legs have no direct angle-tracking signal; geometric
-    rewards alone admit multiple poses, including kneeling.
+Differs from the base `lite3_handstand` task in three orthogonal axes,
+all aimed at producing a policy robust enough to clear the MuJoCo
+sim2real validation step (and ultimately survive deployment on real
+hardware):
 
-This variant matches mjlab's `Lite3_handstand` rewards verbatim:
-  * splits `collision` into TORSO/THIGH/SHANK with weights -2.0/-1.0/-2.0;
-  * `default_pos_reward` tracks all 12 joints (override in env file).
+1. Anti-kneeling rewards (mjlab-aligned).
+   * Splits the combined `collision` (-1.0) term into per-body weights:
+     TORSO=-2.0, THIGH=-1.0, SHANK=-2.0 — SHANK touching the ground is
+     the canonical "kneeling on shins" signal so it gets the heaviest
+     penalty.
+   * The env file overrides `_reward_default_pos_reward` to track all
+     12 joints (parent only tracks the rear 6), and we crank the weight
+     1.0 → 5.0 so the policy gets a strong gradient toward the desire
+     pose (HipY=+0.283 / Knee=+2.0 front, -0.8 / +1.6 rear) instead of
+     finding a shortcut handstand with tucked-in front knees.
 
-See `docs/superpowers/specs/2026-05-01-lite3-handstand-isaacgym-design.md`
-for the base design.
+2. Tighter cmd=0 stillness (`tracking_*_zero` -0.2 → -1.5).
+   * The base task's tracking_lin_vel_zero / tracking_ang_vel_zero have
+     a 12× weaker weight than the positive tracking_* terms, so the
+     policy ends up drifting / spinning when no command is given.
+   * Bumping these to -1.5 makes "stand still under cmd=0" a first-class
+     objective.
+
+3. Wider domain randomisation.
+   * Strict's first iteration (and the base task) trained the policy
+     well in IsaacGym but it overshoots and falls in MuJoCo because it
+     learned to rely on PhysX's specific joint-stop reflex behaviour.
+   * Wider DR — joint_armature, friction, joint_friction/damping,
+     motor_zero_offset — forces the policy to find a control law that
+     works across a *band* of physics rather than one specific PhysX
+     setting.  Goal: any policy that makes it through training is
+     robust enough to transfer to MuJoCo without a sim2sim crash.
+
+Note: `action_scale` and `hip_action_scale` are unchanged.  Reducing
+them would invalidate any partially-trained checkpoint, forcing a fresh
+restart.  Resuming an existing strict run with this updated config
+remains valid — the policy will gradually shift to satisfy the new
+reward shape and DR distribution.
 """
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand.Lite3_handstand_Config import (
     Lite3Cfg_Leggedstand,
@@ -29,22 +51,62 @@ class Lite3Cfg_LeggedstandStrict(Lite3Cfg_Leggedstand):
         # are inherited from the base.
 
         class scales(Lite3Cfg_Leggedstand.rewards.scales):
+            # ---- 1. Anti-kneeling: per-body collision splits ----------
             # Disable the parent's combined collision penalty; replaced
             # below by per-body weights.
             collision = 0.0
-            # Per-body collision penalties (mjlab-aligned).  SHANK is the
-            # kneeling signal and gets the heaviest negative weight.
             thigh_collision = -1.0
             shank_collision = -2.0
             # Trunk contact: termination already covers the catastrophic
             # case but a reward-side penalty produces a stronger gradient
             # near the failure boundary.
             base_contact = -2.0
-            # Bump default_pos_reward from 0.5 → 1.0 to match mjlab; the
-            # env override expands its scope from rear-6 to all 12 joints
-            # so the front legs are now actively driven toward
-            # HipY=+0.283 / Knee=+2.0 once the gate fires.
-            default_pos_reward = 1.0
+
+            # ---- 1. Anti-kneeling: stronger desire-pose tracking -------
+            # Was 0.5 (rear-only via parent); env override extends it to
+            # all 12 joints, and we bump the weight 1.0 → 5.0 so the
+            # policy is meaningfully driven toward the geometric desire
+            # (HipY=+0.283 / Knee=+2.0 front, -0.8 / +1.6 rear).  At
+            # weight 1.0 the term contributed ~0.001 to per-episode
+            # reward — effectively zero gradient.  At 5.0 it should
+            # dominate over the negative `default_pos = -0.05` pull-back.
+            default_pos_reward = 5.0
+
+            # ---- 2. cmd=0 stillness ------------------------------------
+            # Was -0.2 each.  Positive tracking_* are at +2.5, so the
+            # 12.5× imbalance taught the policy to keep moving; bump to
+            # -1.5 each.
+            tracking_lin_vel_zero = -1.5
+            tracking_ang_vel_zero = -1.5
+
+    class domain_rand(Lite3Cfg_Leggedstand.domain_rand):
+        # ---- 3. Wider DR for sim2real robustness ----------------------
+        # Joint armature: was [0.005, 0.015]; widen to [0.005, 0.025]
+        # so the policy doesn't memorize one specific joint inertia.
+        joint_armature_range = [0.005, 0.025]
+
+        # Joint friction / damping: widen by 2× upper bound.
+        joint_friction_range = [0.01, 0.4]    # was [0.01, 0.2]
+        joint_damping_range = [0.0, 0.5]      # was [0.0, 0.2]
+
+        # Foot-ground friction: widen well beyond the conservative
+        # [0.2, 0.8].  Real concrete is closer to 1.0+, so the upper
+        # bound matters; lower bound stays at 0.1 for "slippery floor".
+        friction_range = [0.1, 1.5]            # was [0.2, 0.8]
+
+        # Restitution: keep current range; bouncy floors aren't realistic.
+
+        # Motor zero offset: widen to ±0.05 rad (was ±0.035).
+        # Encoder bias on real Lite3 motors is in this band.
+        motor_zero_offset_range = [-0.05, 0.05]
+
+        # PD gain multipliers: widen ±10% → ±15% to cover real-motor
+        # variability and slight Kp/Kd mistuning at deploy time.
+        stiffness_multiplier_range = [0.85, 1.15]
+        damping_multiplier_range = [0.85, 1.15]
+
+        # Link mass: was [0.9, 1.1]; widen to [0.85, 1.15].
+        multiplied_link_mass_range = [0.85, 1.15]
 
 
 class Lite3CfgPPO_LeggedstandStrict(Lite3CfgPPO_Leggedstand):
