@@ -80,33 +80,29 @@ class Lite3Cfg_LeggedstandStrict(Lite3Cfg_Leggedstand):
             tracking_ang_vel_zero = -1.5
 
     class domain_rand(Lite3Cfg_Leggedstand.domain_rand):
-        # ---- 3. Wider DR for sim2real robustness ----------------------
-        # Joint armature: was [0.005, 0.015]; widen to [0.005, 0.025]
-        # so the policy doesn't memorize one specific joint inertia.
-        joint_armature_range = [0.005, 0.025]
+        # ---- 3. Moderately wider DR for sim2real robustness -----------
+        # Initial strict v2 widened DR aggressively (friction 2×,
+        # joint_damping 2.5× upper bound), which more than doubled the
+        # iteration count to first-handstand and left action_std climbing
+        # to 2.79 at iter 16k without converging.  Pull the most
+        # aggressive expansions back partway — still wider than the base
+        # but not drastically.
+        joint_armature_range = [0.005, 0.020]    # was 0.025; base 0.015
+        joint_friction_range = [0.01, 0.3]       # was 0.4;   base 0.2
+        joint_damping_range = [0.0, 0.3]         # was 0.5;   base 0.2
 
-        # Joint friction / damping: widen by 2× upper bound.
-        joint_friction_range = [0.01, 0.4]    # was [0.01, 0.2]
-        joint_damping_range = [0.0, 0.5]      # was [0.0, 0.2]
+        # Foot-ground friction: keep modest expansion.  Real surfaces
+        # vary, but [0.15, 1.0] already covers most cases the dog will
+        # see; previous [0.1, 1.5] made the policy hedge for a 15× spread
+        # which is overkill.
+        friction_range = [0.15, 1.0]             # was [0.1, 1.5]; base [0.2, 0.8]
 
-        # Foot-ground friction: widen well beyond the conservative
-        # [0.2, 0.8].  Real concrete is closer to 1.0+, so the upper
-        # bound matters; lower bound stays at 0.1 for "slippery floor".
-        friction_range = [0.1, 1.5]            # was [0.2, 0.8]
-
-        # Restitution: keep current range; bouncy floors aren't realistic.
-
-        # Motor zero offset: widen to ±0.05 rad (was ±0.035).
-        # Encoder bias on real Lite3 motors is in this band.
-        motor_zero_offset_range = [-0.05, 0.05]
-
-        # PD gain multipliers: widen ±10% → ±15% to cover real-motor
-        # variability and slight Kp/Kd mistuning at deploy time.
-        stiffness_multiplier_range = [0.85, 1.15]
+        # Motor zero offset, PD gain multipliers, link mass: keep at the
+        # slightly wider values — these don't slow training as much.
+        motor_zero_offset_range = [-0.05, 0.05]   # base ±0.035
+        stiffness_multiplier_range = [0.85, 1.15] # base ±10%
         damping_multiplier_range = [0.85, 1.15]
-
-        # Link mass: was [0.9, 1.1]; widen to [0.85, 1.15].
-        multiplied_link_mass_range = [0.85, 1.15]
+        multiplied_link_mass_range = [0.85, 1.15] # base [0.9, 1.1]
 
 
 class Lite3CfgPPO_LeggedstandStrict(Lite3CfgPPO_Leggedstand):

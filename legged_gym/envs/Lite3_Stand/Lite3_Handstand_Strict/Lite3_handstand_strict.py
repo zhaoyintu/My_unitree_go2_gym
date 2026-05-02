@@ -84,3 +84,19 @@ class Lite3_legstand_strict(Lite3_legstand):
         return torch.exp(-torch.sum(torch.abs(err), dim=1)) * (
             torch.mean(self.rew_hanstand) > 0.78
         )
+
+    # ------------------------------------------------------------------
+    # Override: parent's `_reward_tracking_lin_vel_zero` returns
+    # `exp(-error²)` (high when matching cmd=0), so a *negative* weight
+    # actually penalises stillness — the opposite of the term's name and
+    # opposite of how `_reward_tracking_ang_vel_zero` is implemented
+    # (which returns raw `error²`, correctly penalising motion under a
+    # negative weight).  Replace with the same raw-`error²` shape so a
+    # negative weight (we set -1.5 in cfg) really does push the policy
+    # toward zero linear velocity when cmd=0.
+    def _reward_tracking_lin_vel_zero(self):
+        x_error = torch.square(self.commands[:, 0] - self.base_lin_vel[:, 2])
+        y_error = torch.square(self.commands[:, 1] - self.base_lin_vel[:, 1])
+        return (x_error + y_error) * (
+            torch.mean(self.rew_hanstand) > 0.78
+        ) * (torch.norm(self.commands[:, :2], dim=-1) < 0.1)
