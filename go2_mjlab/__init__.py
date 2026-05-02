@@ -18,8 +18,14 @@ from go2_mjlab.config.go2_spring_jump.env_cfgs import unitree_go2_spring_jump_en
 from go2_mjlab.config.go2_spring_jump.rl_cfg import unitree_go2_spring_jump_ppo_runner_cfg
 from go2_mjlab.config.go2_backflip.env_cfgs import unitree_go2_backflip_env_cfg
 from go2_mjlab.config.go2_backflip.rl_cfg import unitree_go2_backflip_ppo_runner_cfg
-from go2_mjlab.config.lite3_handstand.env_cfgs import unitree_lite3_handstand_env_cfg
-from go2_mjlab.config.lite3_handstand.rl_cfg import unitree_lite3_handstand_ppo_runner_cfg
+from go2_mjlab.config.lite3_handstand.env_cfgs import (
+    unitree_lite3_handstand_env_cfg,
+    unitree_lite3_handstand_robust_env_cfg,
+)
+from go2_mjlab.config.lite3_handstand.rl_cfg import (
+    unitree_lite3_handstand_ppo_runner_cfg,
+    unitree_lite3_handstand_robust_ppo_runner_cfg,
+)
 from mjlab.tasks.registry import register_mjlab_task
 
 # Flat terrain velocity tracking (trot)
@@ -84,4 +90,12 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_ppo_runner_cfg(),
+)
+
+# Lite3 handstand robust variant: stronger zero-command stance and pushes
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-Robust",
+    env_cfg=unitree_lite3_handstand_robust_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_robust_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_robust_ppo_runner_cfg(),
 )

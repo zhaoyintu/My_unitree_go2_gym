@@ -42,3 +42,9 @@ def unitree_lite3_handstand_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
         num_steps_per_env=24,
         max_iterations=15_000,
     )
+
+
+def unitree_lite3_handstand_robust_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+    cfg = unitree_lite3_handstand_ppo_runner_cfg()
+    cfg.experiment_name = "lite3_handstand_robust"
+    return cfg

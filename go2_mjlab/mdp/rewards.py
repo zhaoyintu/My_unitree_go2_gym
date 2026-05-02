@@ -577,6 +577,29 @@ def _handstand_quality(env, target_height: float = 0.08) -> torch.Tensor:
     return torch.full_like(base_z, 2.0)
 
 
+def _handstand_standing_command_mask(
+    env: ManagerBasedRlEnv,
+    command_name: str | None,
+    moving_threshold: float,
+) -> torch.Tensor:
+    if command_name is None:
+        return torch.zeros(env.num_envs, device=env.device)
+    command = env.command_manager.get_command(command_name)
+    lin_near_zero = torch.norm(command[:, :2], dim=1) < moving_threshold
+    yaw_near_zero = torch.abs(command[:, 2]) < moving_threshold
+    return torch.logical_and(lin_near_zero, yaw_near_zero).float()
+
+
+def _handstand_moving_command_mask(
+    env: ManagerBasedRlEnv,
+    command_name: str | None,
+    moving_threshold: float,
+) -> torch.Tensor:
+    if command_name is None:
+        return torch.ones(env.num_envs, device=env.device)
+    return 1.0 - _handstand_standing_command_mask(env, command_name, moving_threshold)
+
+
 def handstand_tracking_lin_vel(
     env: ManagerBasedRlEnv,
     command_name: str,
@@ -662,6 +685,8 @@ def handstand_contact(
     env: ManagerBasedRlEnv,
     sensor_name: str,
     foot_indices: tuple[int, ...],
+    command_name: str | None = None,
+    moving_threshold: float = 0.1,
     target_height: float = 0.08,
 ) -> torch.Tensor:
     """Reward exactly one of the indexed STANCE feet in ground contact.
@@ -675,7 +700,8 @@ def handstand_contact(
     selected = contact[:, list(foot_indices)]
     n_contact = torch.sum(selected, dim=1)
     quality = _handstand_quality(env, target_height)
-    return (n_contact == 1).float() * (quality > 0.70).float()
+    moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+    return (n_contact == 1).float() * (quality > 0.70).float() * moving_mask
 
 
 class handstand_feet_air_time:
@@ -696,6 +722,8 @@ class handstand_feet_air_time:
         env: ManagerBasedRlEnv,
         sensor_name: str,
         foot_indices: tuple[int, ...],
+        command_name: str | None = None,
+        moving_threshold: float = 0.1,
         target_height: float = 0.08,
     ) -> torch.Tensor:
         contact_sensor: ContactSensor = env.scene[sensor_name]
@@ -710,7 +738,8 @@ class handstand_feet_air_time:
 
         self.last_contacts = selected
         quality = _handstand_quality(env, target_height)
-        return rew * (quality > 0.70).float()
+        moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+        return rew * (quality > 0.70).float() * moving_mask
 
     def reset(self, env_ids: torch.Tensor) -> None:
         self.air_time[env_ids] = 0.0
@@ -724,6 +753,8 @@ def handstand_feet_clearance(
     foot_site_names: tuple[str, ...] = ("FR", "FL", "RR", "RL"),
     target_foot_height: float = 0.06,
     cycle_time: float = 1.6,
+    command_name: str | None = None,
+    moving_threshold: float = 0.1,
     target_height: float = 0.08,
 ) -> torch.Tensor:
     """Sinusoidal indexed-foot clearance reward.
@@ -749,7 +780,41 @@ def handstand_feet_clearance(
     rew += torch.exp(-torch.abs(selected_z[:, 1] - target) * 10) * swing_mask_1
 
     quality = _handstand_quality(env, target_height)
-    return rew * (quality > 0.70).float()
+    moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+    return rew * (quality > 0.70).float() * moving_mask
+
+
+def handstand_stance_contact_zero(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...],
+    command_name: str,
+    moving_threshold: float = 0.1,
+    target_height: float = 0.08,
+) -> torch.Tensor:
+    """Reward both stance feet staying planted when command is zero."""
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0
+    selected = contact[:, list(foot_indices)]
+    n_contact = torch.sum(selected, dim=1)
+    quality = _handstand_quality(env, target_height)
+    standing_mask = _handstand_standing_command_mask(env, command_name, moving_threshold)
+    return (n_contact == len(foot_indices)).float() * (quality > 0.70).float() * standing_mask
+
+
+def handstand_joint_vel_zero(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    moving_threshold: float = 0.1,
+    target_height: float = 0.08,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Penalize joint motion when the commanded handstand velocity is zero."""
+    asset: Entity = env.scene[asset_cfg.name]
+    joint_vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    quality = _handstand_quality(env, target_height)
+    standing_mask = _handstand_standing_command_mask(env, command_name, moving_threshold)
+    return torch.sum(torch.square(joint_vel), dim=1) * (quality > 0.70).float() * standing_mask
 
 
 def handstand_default_pos_reward(

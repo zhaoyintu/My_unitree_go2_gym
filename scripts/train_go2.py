@@ -3,10 +3,11 @@
 
 Usage:
   python scripts/train_go2.py Mjlab-Go2-Handstand
+  python scripts/train_go2.py Mjlab-Lite3-Handstand-Robust
   python scripts/train_go2.py Mjlab-Go2-Trot-Flat --env.scene.num_envs 4096
   python scripts/train_go2.py --list  # list available tasks
 
-This script imports go2_mjlab to register all Go2 tasks with mjlab's registry,
+This script imports go2_mjlab to register all local tasks with mjlab's registry,
 then delegates to mjlab's training infrastructure.
 """
 

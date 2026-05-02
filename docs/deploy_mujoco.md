@@ -59,6 +59,29 @@ python scripts/deploy_lite3_handstand.py \
 python scripts/deploy_lite3_handstand.py --dry-run
 ```
 
+### Robust 对照任务
+
+原始任务保持不变：
+
+```bash
+python scripts/train_go2.py Mjlab-Lite3-Handstand
+```
+
+新增 robust 对照任务会写到独立 experiment：
+
+```bash
+python scripts/train_go2.py Mjlab-Lite3-Handstand-Robust
+```
+
+对照 deploy 时指定对应日志根目录：
+
+```bash
+python scripts/deploy_lite3_handstand.py \
+  --log-root logs/rsl_rl/lite3_handstand_robust \
+  --no-viewer \
+  --duration 20
+```
+
 ---
 
 ## 方式一：mjlab play（使用 mjlab 环境回放）

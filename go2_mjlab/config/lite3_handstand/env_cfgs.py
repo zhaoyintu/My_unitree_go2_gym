@@ -482,3 +482,53 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         decimation=4,
         episode_length_s=20.0,
     )
+
+
+def unitree_lite3_handstand_robust_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+    """Lite3 handstand variant with stronger zero-command stance and recovery."""
+    cfg = unitree_lite3_handstand_env_cfg(play=play)
+
+    cfg.commands["twist"].rel_standing_envs = 0.25
+
+    rewards = cfg.rewards
+    rewards["tracking_lin_vel_zero"].weight = -0.8
+    rewards["tracking_ang_vel_zero"].weight = -0.6
+
+    rewards["contact"].params["command_name"] = "twist"
+    rewards["contact"].params["moving_threshold"] = 0.1
+    rewards["feet_air_time"].params["command_name"] = "twist"
+    rewards["feet_air_time"].params["moving_threshold"] = 0.1
+    rewards["feet_clearance"].params["command_name"] = "twist"
+    rewards["feet_clearance"].params["moving_threshold"] = 0.1
+
+    rewards["zero_stance_contact"] = RewardTermCfg(
+        func=go2_mdp.handstand_stance_contact_zero, weight=0.8,
+        params={
+            "sensor_name": "feet_ground_contact",
+            "foot_indices": (0, 1),
+            "command_name": "twist",
+            "moving_threshold": 0.1,
+        },
+    )
+    rewards["zero_joint_vel"] = RewardTermCfg(
+        func=go2_mdp.handstand_joint_vel_zero, weight=-0.02,
+        params={
+            "command_name": "twist",
+            "moving_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+        },
+    )
+
+    events = cfg.events
+    if "push_robot" in events:
+        events["push_robot"].interval_range_s = (3.0, 6.0)
+        events["push_robot"].params["velocity_range"] = {
+            "x": (-0.4, 0.4),
+            "y": (-0.4, 0.4),
+            "z": (-0.25, 0.25),
+            "roll": (-0.45, 0.45),
+            "pitch": (-0.45, 0.45),
+            "yaw": (-0.65, 0.65),
+        }
+
+    return cfg
