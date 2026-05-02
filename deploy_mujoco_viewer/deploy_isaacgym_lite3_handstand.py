@@ -74,16 +74,15 @@ KV = np.full(12, 1.0)
 # Effort limits (Nm) — Lite3 motor ctrlrange is ±30 N for all joints.
 EFFORT_LIMITS = np.full(12, 30.0)
 
-# Reflected rotor inertia (lite3_constants.py uses Go2 motor specs since
-# Lite3 motor data isn't fully published; should be close enough).
-ROTOR_INERTIA = 0.000111842
-HIPX_GEAR = HIPY_GEAR = 6.0
-KNEE_GEAR = 9.0
-ARMATURE = np.array([
-    ROTOR_INERTIA * HIPX_GEAR ** 2,    # HipX
-    ROTOR_INERTIA * HIPY_GEAR ** 2,    # HipY
-    ROTOR_INERTIA * KNEE_GEAR ** 2,    # Knee
-] * 4)
+# Joint armature.  Training DR samples `joint_armature_range=[0.005, 0.015]`
+# uniformly per-episode (cfg.domain_rand), so the policy has seen joints
+# with effective inertia in that range.  We pick the centre of the range
+# (0.01) for deploy — using the rotor_inertia*gear^2 derivation puts HipX/HipY
+# at 0.004, BELOW the training min, which makes those joints more responsive
+# than what the policy expects and contributes to overshoot in the handstand
+# rollout.  Constant across joints to match training (DR samples per-joint
+# but the variation is small inside [0.005, 0.015]).
+ARMATURE = np.full(12, 0.01)
 
 # Action scale — per-joint (HipX uses smaller scale per deploy_lite3_recovery
 # config and lite3_constants.py::LITE3_HANDSTAND_ACTION_SCALE).
@@ -111,7 +110,7 @@ OBS_SCALE_DOF_POS = 1.0
 OBS_SCALE_DOF_VEL = 0.05
 
 # Sim config: timestep=0.005, decimation=4 → 50 Hz control (matches env_cfgs).
-SIM_DT = 0.005
+SIM_DT = 0.001
 DECIMATION = 4
 CTRL_DT = SIM_DT * DECIMATION
 
@@ -214,8 +213,19 @@ def build_model() -> mujoco.MjModel:
         a.dyntype = mujoco.mjtDyn.mjDYN_NONE
         a.gaintype = mujoco.mjtGain.mjGAIN_FIXED
         a.biastype = mujoco.mjtBias.mjBIAS_AFFINE
-        a.inheritrange = 1.0
-        a.ctrllimited = True
+        # IMPORTANT: do NOT clamp ctrl to joint range.  IsaacGym's
+        # `_compute_torques` uses the *unclamped* target setpoint (which
+        # can be far outside the joint limit when the policy outputs
+        # large actions), produces a large nominal torque, and then clips
+        # the torque to the effort limit.  Setting ctrllimited=True here
+        # would cause MuJoCo to clamp ctrl to joint range first, giving a
+        # much smaller torque that doesn't match training.  Instead leave
+        # ctrl unclamped and rely on forcelimited+forcerange below to
+        # saturate the torque.  Empirically the trained Lite3 handstand
+        # policy outputs raw action magnitudes up to ~110 in steady state,
+        # so this divergence matters a lot.
+        a.inheritrange = 0.0
+        a.ctrllimited = False
         a.gainprm[0] = KP[i]
         a.biasprm[1] = -KP[i]
         a.biasprm[2] = -KV[i]
@@ -343,6 +353,15 @@ def main():
     parser.add_argument("--video-height", type=int, default=720)
     parser.add_argument("--video-camera", type=str, default=None,
                         help="MJCF <camera> name to render from (default: free camera tracking trunk)")
+    parser.add_argument("--trace", type=int, default=0, metavar="N",
+                        help="Print obs/action/state for the first N control steps and exit. "
+                             "Compares each value with what the policy was trained against.")
+    parser.add_argument("--null-policy", action="store_true",
+                        help="Replace the policy with a constant-zero output (target_q == default). "
+                             "Useful for testing whether MuJoCo physics is stable at init pose without "
+                             "any policy intervention.")
+    parser.add_argument("--summary", type=int, default=0, metavar="N",
+                        help="One-line-per-step summary trace (base_z, grav_b, max|a|, mean|dq|).")
     args = parser.parse_args()
 
     actor = Actor()
@@ -403,12 +422,76 @@ def main():
 
     def step_once():
         nonlocal last_action
-        action = actor.act(build_obs())
+        if args.null_policy:
+            action = np.zeros(12, dtype=np.float64)
+        else:
+            action = actor.act(build_obs())
         target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
         data.ctrl[act_ids] = target_q
         for _ in range(DECIMATION):
             mujoco.mj_step(model, data)
         last_action = action.astype(np.float64)
+
+    # ---- one-line summary trace: base_z, grav_b, max|a|, mean|dq| ----
+    if args.summary > 0:
+        print(f"\n=== MUJOCO SUMMARY first {args.summary} steps ===")
+        print(f"  step  base_z  grav_b_x  grav_b_z  max|a|     mean|dq|")
+        for i in range(args.summary):
+            obs = build_obs()
+            if args.null_policy:
+                action = np.zeros(12)
+            else:
+                action = actor.act(obs)
+            target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
+            data.ctrl[act_ids] = target_q
+            for _ in range(DECIMATION):
+                mujoco.mj_step(model, data)
+            last_action = action.astype(np.float64)
+            quat = data.qpos[3:7]
+            grav_b = quat_rotate_inverse(quat, np.array([0.0, 0.0, -1.0]))
+            qpos, qvel = joint_state(model, data)
+            print(f"  {i:4d}  {data.qpos[2]:6.3f}  {grav_b[0]:+.3f}    "
+                  f"{grav_b[2]:+.3f}    {np.abs(action).max():6.2f}    "
+                  f"{np.abs(qvel).mean():6.2f}")
+        return
+
+    # ---- diagnostic trace mode: dump obs/action/state for first N steps ----
+    if args.trace > 0:
+        np.set_printoptions(precision=4, suppress=True, linewidth=160)
+        print(f"\n=== TRACE first {args.trace} control steps ===")
+        print(f"SIM_DT={SIM_DT}  DECIMATION={DECIMATION}  CTRL_DT={CTRL_DT}")
+        print(f"KP={KP[0]}  KV={KV[0]}  ACTION_SCALE[0:3]={ACTION_SCALE[:3]}")
+        print(f"DEFAULT_JOINT_POS={DEFAULT_JOINT_POS}")
+        for i in range(args.trace):
+            obs = build_obs()
+            ang_vel = data.sensor("imu_ang_vel").data.copy()
+            quat = data.qpos[3:7].copy()
+            grav = quat_rotate_inverse(quat, np.array([0.0, 0.0, -1.0]))
+            qpos, qvel = joint_state(model, data)
+            print(f"\n--- step {i}  t={data.time:.4f}s  base_z={data.qpos[2]:.4f}m"
+                  f"  base_quat(wxyz)={quat} ---")
+            print(f"  obs[0:3]   zeros + stand_cmd          : {obs[0:3]}")
+            print(f"  obs[3:6]   ang_vel * 0.25  (raw={ang_vel}) : {obs[3:6]}")
+            print(f"  obs[6:9]   projected_gravity (body)   : {obs[6:9]}")
+            print(f"  obs[9:12]  scaled_cmd                  : {obs[9:12]}")
+            print(f"  obs[12:24] (q-default)*1.0  raw_q={qpos}")
+            print(f"             scaled                       : {obs[12:24]}")
+            print(f"  obs[24:36] dq*0.05  raw_dq={qvel}")
+            print(f"             scaled                       : {obs[24:36]}")
+            print(f"  obs[36:48] last_action                  : {obs[36:48]}")
+            if args.null_policy:
+                action = np.zeros(12)
+            else:
+                action = actor.act(obs)
+            target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
+            print(f"  raw action (policy out, no scale)      : {action}")
+            print(f"  target_q   = action*scale + default    : {target_q}")
+            data.ctrl[act_ids] = target_q
+            for _ in range(DECIMATION):
+                mujoco.mj_step(model, data)
+            last_action = action.astype(np.float64)
+        print(f"\n=== TRACE done.  Final base_z={data.qpos[2]:.4f}m ===")
+        return
 
     if args.video:
         record_video(model, data, step_once, n_steps, args)
