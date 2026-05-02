@@ -214,7 +214,7 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             },
         ),
         "base_height": RewardTermCfg(
-            func=go2_mdp.base_height, weight=1.5,
+            func=go2_mdp.handstand_base_height, weight=1.5,
             params={"target_height": LITE3_BASE_HEIGHT_TARGET},
         ),
         "tracking_lin_vel": RewardTermCfg(
@@ -234,13 +234,10 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             params={"command_name": "twist"},
         ),
         "lin_vel_z": RewardTermCfg(
-            func=go2_mdp.lin_vel_x_penalty, weight=0.2,
+            func=go2_mdp.handstand_lin_vel_z, weight=0.2,
         ),
         "ang_vel_xy": RewardTermCfg(
-            func=go2_mdp.ang_vel_xy_penalty, weight=0.2,
-        ),
-        "ang_xz_penalty": RewardTermCfg(
-            func=go2_mdp.ang_xz_penalty, weight=-0.5,
+            func=go2_mdp.handstand_ang_vel_yz, weight=0.2,
         ),
         "symmetric_joints": RewardTermCfg(
             func=go2_mdp.symmetric_joints, weight=-0.1,
@@ -264,7 +261,7 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             func=go2_mdp.handstand_feet_clearance, weight=0.4,
             params={
                 "asset_cfg": SceneEntityCfg("robot", body_names=("TORSO",)),
-                "foot_indices": (2, 3),
+                "foot_indices": (0, 1),
                 "foot_site_names": foot_names,    # Lite3 site naming
                 "target_foot_height": 0.06,
                 "cycle_time": 1.6,
@@ -343,13 +340,38 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
             },
         ),
-        "foot_friction": EventTermCfg(
+        "foot_friction_slide": EventTermCfg(
             mode="startup",
             func=envs_mdp.dr.geom_friction,
             params={
                 "asset_cfg": SceneEntityCfg("robot", geom_names=geom_names),
                 "operation": "abs",
+                "axes": [0],
                 "ranges": (0.2, 0.8),
+                "shared_random": True,
+            },
+        ),
+        "foot_friction_spin": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.dr.geom_friction,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", geom_names=geom_names),
+                "operation": "abs",
+                "distribution": "log_uniform",
+                "axes": [1],
+                "ranges": (1e-4, 2e-2),
+                "shared_random": True,
+            },
+        ),
+        "foot_friction_roll": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.dr.geom_friction,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", geom_names=geom_names),
+                "operation": "abs",
+                "distribution": "log_uniform",
+                "axes": [2],
+                "ranges": (1e-5, 5e-3),
                 "shared_random": True,
             },
         ),
@@ -366,8 +388,21 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             mode="startup",
             func=envs_mdp.dr.body_com_offset,
             params={
+                "asset_cfg": SceneEntityCfg("robot", body_names=("TORSO",)),
+                "operation": "add",
+                "ranges": {
+                    0: (-0.05, 0.05),
+                    1: (-0.05, 0.05),
+                    2: (-0.05, 0.05),
+                },
+            },
+        ),
+        "encoder_bias": EventTermCfg(
+            mode="startup",
+            func=envs_mdp.dr.encoder_bias,
+            params={
                 "asset_cfg": SceneEntityCfg("robot"),
-                "ranges": (-0.05, 0.05),
+                "bias_range": (-0.01, 0.01),
             },
         ),
         # ---- Sim-to-real DR (DISABLED for A/B experiment) ----------------
@@ -394,17 +429,19 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         # a custom obs/action buffering wrapper for delay and a custom
         # geom_solref event for restitution.  Add later if sim-to-real
         # transfer needs them.
-        # Lite3 is lighter than Go2 (5.6 kg vs 12 kg), so the same ±20 N
-        # force gives ~2x the acceleration.  Keep magnitudes for now and
-        # tune after first training run.
         "push_robot": EventTermCfg(
-            func=envs_mdp.apply_external_force_torque,
+            func=envs_mdp.push_by_setting_velocity,
             mode="interval",
             interval_range_s=(4.0, 8.0),
             params={
-                "asset_cfg": SceneEntityCfg("robot", body_names=("TORSO",)),
-                "force_range": (-20.0, 20.0),
-                "torque_range": (-8.0, 8.0),
+                "velocity_range": {
+                    "x": (-0.3, 0.3),
+                    "y": (-0.3, 0.3),
+                    "z": (-0.2, 0.2),
+                    "roll": (-0.35, 0.35),
+                    "pitch": (-0.35, 0.35),
+                    "yaw": (-0.5, 0.5),
+                },
             },
         ),
     }

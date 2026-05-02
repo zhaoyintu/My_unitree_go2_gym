@@ -37,6 +37,17 @@ def base_height(
     return torch.square(base_z - target_height)
 
 
+def handstand_base_height(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Reward base height tracking for handstand tasks."""
+    asset: Entity = env.scene[asset_cfg.name]
+    base_z = asset.data.root_link_pos_w[:, 2]
+    return torch.exp(-torch.abs(base_z - target_height) * 5)
+
+
 class joint_acceleration:
     """Penalize joint accelerations via finite differences (matches IsaacGym formula).
 
@@ -264,6 +275,15 @@ def lin_vel_x_penalty(
     return torch.square(asset.data.root_link_lin_vel_b[:, 0])
 
 
+def handstand_lin_vel_z(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Reward low vertical body motion in front-paw handstand."""
+    asset: Entity = env.scene[asset_cfg.name]
+    return torch.exp(-torch.abs(asset.data.root_link_lin_vel_b[:, 0]) * 10)
+
+
 def ang_vel_xy_penalty(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
@@ -274,6 +294,15 @@ def ang_vel_xy_penalty(
     """
     asset: Entity = env.scene[asset_cfg.name]
     return torch.exp(-torch.norm(torch.abs(asset.data.root_link_ang_vel_b[:, :2]), dim=1))
+
+
+def handstand_ang_vel_yz(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Reward low non-yaw angular velocity during front-paw handstand."""
+    asset: Entity = env.scene[asset_cfg.name]
+    return torch.exp(-torch.norm(torch.abs(asset.data.root_link_ang_vel_b[:, 1:3]), dim=1))
 
 
 def default_joint_penalty(
@@ -363,12 +392,13 @@ def symmetric_joints(
     """Reward left-right joint symmetry."""
     asset: Entity = env.scene[asset_cfg.name]
     joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]  # [B, 12]
-    dof = joint_pos.view(env.num_envs, 4, 3)  # [B, 4 legs, 3 joints]
+    dof = joint_pos.view(env.num_envs, 4, 3).clone()  # [B, 4 legs, 3 joints]
     # Negate right-side hip abduction to match left side
     dof[:, 1, 0] = -dof[:, 1, 0]
     dof[:, 3, 0] = -dof[:, 3, 0]
-    err = torch.sum(torch.abs(dof[:, 0, :] - dof[:, 1, :]), dim=1)
-    return err
+    err_front = torch.sum(torch.abs(dof[:, 0, :] - dof[:, 1, :]), dim=1)
+    err_rear = torch.sum(torch.abs(dof[:, 2, :] - dof[:, 3, :]), dim=1)
+    return 0.5 * (err_front + err_rear)
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +635,7 @@ def handstand_tracking_lin_vel_zero(
     y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
     quality = _handstand_quality(env, target_height)
     cmd_near_zero = (torch.norm(command[:, :2], dim=1) < 0.1).float()
-    return torch.exp(-(x_error + y_error) / tracking_sigma) * (quality > 0.70).float() * cmd_near_zero
+    return (x_error + y_error) * (quality > 0.70).float() * cmd_near_zero
 
 
 def handstand_tracking_ang_vel_zero(
@@ -696,28 +726,27 @@ def handstand_feet_clearance(
     cycle_time: float = 1.6,
     target_height: float = 0.08,
 ) -> torch.Tensor:
-    """Sinusoidal swing-foot clearance reward.
+    """Sinusoidal indexed-foot clearance reward.
 
-    Mirrors IsaacGym GO2_Leggedstand `_reward_feet_clearance`: rewards the
-    two SWING feet (rear pair for the front-paw handstand walk) tracking
-    a |sin(2π·phase)|·target_foot_height world-z target during the swing
-    half of the gait cycle.  `foot_site_names` must list all four foot
-    sites in the same order used elsewhere in the env (Go2 default
-    "FR/FL/RR/RL"; Lite3 uses "FL/FR/HL/HR").
+    Rewards the two indexed feet tracking a |sin(2π·phase)|·target_foot_height
+    world-z target during the swing half of the gait cycle. For front-paw
+    handstand walking, pass the front stance pair `(0, 1)`. `foot_site_names`
+    must list all four foot sites in the same order used elsewhere in the env
+    (Go2 default "FR/FL/RR/RL"; Lite3 uses "FL/FR/HL/HR").
     """
-    assert len(foot_indices) == 2, "handstand_feet_clearance expects exactly two swing feet"
+    assert len(foot_indices) == 2, "handstand_feet_clearance expects exactly two feet"
     asset: Entity = env.scene[asset_cfg.name]
     site_ids, _ = asset.find_sites(foot_site_names)
     feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
-    swing_z = feet_z[:, list(foot_indices)]  # [B, 2]
+    selected_z = feet_z[:, list(foot_indices)]  # [B, 2]
 
     phase = (env.episode_length_buf * env.step_dt) % cycle_time / cycle_time
     target = torch.abs(torch.sin(2 * torch.pi * phase)) * target_foot_height
     swing_mask_0 = (phase >= 0.5).float()  # foot 0 swings in second half
     swing_mask_1 = (phase < 0.5).float()   # foot 1 swings in first half
 
-    rew = torch.exp(-torch.abs(swing_z[:, 0] - target) * 10) * swing_mask_0
-    rew += torch.exp(-torch.abs(swing_z[:, 1] - target) * 10) * swing_mask_1
+    rew = torch.exp(-torch.abs(selected_z[:, 0] - target) * 10) * swing_mask_0
+    rew += torch.exp(-torch.abs(selected_z[:, 1] - target) * 10) * swing_mask_1
 
     quality = _handstand_quality(env, target_height)
     return rew * (quality > 0.70).float()
