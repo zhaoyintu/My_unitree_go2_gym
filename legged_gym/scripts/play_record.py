@@ -82,8 +82,18 @@ def play_and_record(args):
         env._reset_root_states = types.MethodType(_reset_root_states_clean, env)
         # Trigger reset on all envs so the patched versions take effect.
         env.reset_idx(torch.arange(env.num_envs, device=env.device))
+        # `reset_idx` re-samples commands; if the user wanted cmd=0 we
+        # need to pin them down again *after* the reset.
+        env.commands[:, 0] = float(args.cmd_vx)
+        env.commands[:, 1] = float(args.cmd_vy)
+        env.commands[:, 2] = float(args.cmd_wz)
         env.compute_observations()
         print("[play_record] forced exact default init pose")
+    else:
+        # Override commands to user-specified values (default: all zero).
+        env.commands[:, 0] = float(args.cmd_vx)
+        env.commands[:, 1] = float(args.cmd_vy)
+        env.commands[:, 2] = float(args.cmd_wz)
 
     obs = env.get_observations()
 
@@ -99,11 +109,6 @@ def play_and_record(args):
         runner.alg.actor_critic.to(env.device)
         print(f"[play_record] loaded policy from {args.policy_path}")
     policy = runner.get_inference_policy(device=env.device)
-
-    # Override commands to zero (front-paw stand stationary).
-    env.commands[:, 0] = float(args.cmd_vx)
-    env.commands[:, 1] = float(args.cmd_vy)
-    env.commands[:, 2] = float(args.cmd_wz)
 
     # ------------------------------------------------------------------
     # Trace mode: run physics + policy for N steps, no rendering.
