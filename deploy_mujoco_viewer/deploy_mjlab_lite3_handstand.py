@@ -26,6 +26,12 @@ import mujoco.viewer
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LITE3_XML = REPO_ROOT / "go2_mjlab" / "robots" / "xmls" / "lite3.xml"
+FOOT_COLLISION_NAMES = {
+    "FL_FOOT_collision",
+    "FR_FOOT_collision",
+    "HL_FOOT_collision",
+    "HR_FOOT_collision",
+}
 
 # Joint definition order in the MJCF: FL, FR, HL, HR (each: HipX, HipY, Knee).
 # Important: this order must match what mjlab's joint_pos_rel /
@@ -87,6 +93,8 @@ NUM_OBS = NUM_SINGLE_OBS * FRAME_STACK   # 480
 SIM_DT = 0.005
 DECIMATION = 4
 CTRL_DT = SIM_DT * DECIMATION
+SOLVER_ITERATIONS = 10
+SOLVER_LS_ITERATIONS = 20
 
 # Initial pose: matches HANDSTAND_INIT_STATE.pos in lite3_constants.py.
 # Lite3 starts upright on four paws (TORSO body is anchored at z=0.30 in
@@ -132,8 +140,50 @@ class Actor(nn.Module):
 # ---------------------------------------------------------------------------
 # Build mujoco model: lite3.xml + ground + PD position actuators
 # ---------------------------------------------------------------------------
+def _set_array_field(field, values) -> None:
+    for i, value in enumerate(values):
+        field[i] = value
+
+
+def apply_training_collision_cfg(spec: mujoco.MjSpec) -> None:
+    """Mirror lite3_constants.py::FULL_COLLISION without importing mjlab."""
+    for geom in spec.geoms:
+        if not geom.name.endswith("_collision"):
+            geom.contype = 0
+            geom.conaffinity = 0
+            continue
+
+        geom.contype = 1
+        geom.conaffinity = 1
+        geom.condim = 1
+        geom.priority = 0
+        _set_array_field(geom.solref, (0.01, 1.0))
+
+        if geom.name in FOOT_COLLISION_NAMES:
+            geom.condim = 6
+            geom.priority = 1
+            _set_array_field(geom.friction, (1.0, 5e-3, 5e-4))
+
+
+def apply_training_sim_options(model: mujoco.MjModel) -> None:
+    """Mirror env_cfgs.py::SimulationCfg/MujocoCfg for deployment."""
+    model.opt.jacobian = mujoco.mjtJacobian.mjJAC_AUTO
+    model.opt.cone = mujoco.mjtCone.mjCONE_PYRAMIDAL
+    model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
+    model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+    model.opt.timestep = SIM_DT
+    model.opt.impratio = 1.0
+    model.opt.gravity[:] = [0.0, 0.0, -9.81]
+    model.opt.iterations = SOLVER_ITERATIONS
+    model.opt.tolerance = 1e-8
+    model.opt.ls_iterations = SOLVER_LS_ITERATIONS
+    model.opt.ls_tolerance = 0.01
+    model.opt.ccd_iterations = 50
+
+
 def build_model() -> mujoco.MjModel:
     spec = mujoco.MjSpec.from_file(str(LITE3_XML))
+    apply_training_collision_cfg(spec)
 
     # Bigger offscreen framebuffer so `mujoco.Renderer` can produce 1080p+ frames.
     spec.visual.global_.offwidth = 1920
@@ -169,20 +219,27 @@ def build_model() -> mujoco.MjModel:
     # joints with target setpoints (matches mjlab BuiltinPositionActuator).
     name_to_idx = {a.name: i for i, a in enumerate(spec.actuators)}
     for i, jn in enumerate(JOINT_NAMES):
-        spec.joint(jn).armature = ARMATURE[i]
+        joint = spec.joint(jn)
+        joint.armature = ARMATURE[i]
         a = spec.actuators[name_to_idx[jn.removesuffix("_joint")]]
         a.dyntype = mujoco.mjtDyn.mjDYN_NONE
         a.gaintype = mujoco.mjtGain.mjGAIN_FIXED
         a.biastype = mujoco.mjtBias.mjBIAS_AFFINE
-        a.inheritrange = 1.0
-        a.ctrllimited = True
         a.gainprm[0] = KP[i]
         a.biasprm[1] = -KP[i]
         a.biasprm[2] = -KV[i]
+        # mjlab's BuiltinPositionActuator allows setpoints beyond joint
+        # kinematic limits; only the resulting force is clipped.
+        a.inheritrange = 0.0
+        a.ctrllimited = False
         a.forcelimited = True
         a.forcerange[:] = [-EFFORT_LIMITS[i], EFFORT_LIMITS[i]]
+        delta = EFFORT_LIMITS[i] / KP[i]
+        a.ctrlrange[:] = [joint.range[0] - delta, joint.range[1] + delta]
 
-    return spec.compile()
+    model = spec.compile()
+    apply_training_sim_options(model)
+    return model
 
 
 # ---------------------------------------------------------------------------

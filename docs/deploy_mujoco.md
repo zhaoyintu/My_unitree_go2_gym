@@ -1,23 +1,84 @@
 # MuJoCo 部署 / Play 指南
 
-## 方式一：mjlab play（推荐，使用 mjlab 训练模型）
+## Lite3 handstand 快速测试
+
+`scripts/deploy_lite3_handstand.py` 会默认查找最新训练日志：
+
+```text
+logs/rsl_rl/lite3_handstand/<latest_run>/model_*.pt
+```
+
+然后调用 `deploy_mujoco_viewer/deploy_mjlab_lite3_handstand.py` 在纯 MuJoCo
+里运行策略，不需要 `mjlab`。
+
+### 自动加载最新 checkpoint
+
+```bash
+cd /home/yiz/workspace/src/locomotion/My_unitree_go2_gym
+python scripts/deploy_lite3_handstand.py
+```
+
+### 指定速度命令
+
+```bash
+python scripts/deploy_lite3_handstand.py --cmd 0.2 0.0 0.0
+```
+
+### Headless smoke test
+
+```bash
+python scripts/deploy_lite3_handstand.py --no-viewer --duration 20
+```
+
+### 录制视频
+
+```bash
+python scripts/deploy_lite3_handstand.py \
+  --video outputs/lite3_handstand.mp4 \
+  --duration 30
+```
+
+### 指定 checkpoint
+
+```bash
+python scripts/deploy_lite3_handstand.py \
+  --policy logs/rsl_rl/lite3_handstand/<run>/model_14999.pt
+```
+
+也可以指定 run 和 checkpoint 文件名：
+
+```bash
+python scripts/deploy_lite3_handstand.py \
+  --run 2026-05-02_12-30-00 \
+  --ckpt model_5000.pt
+```
+
+先确认自动选择的命令但不启动仿真：
+
+```bash
+python scripts/deploy_lite3_handstand.py --dry-run
+```
+
+---
+
+## 方式一：mjlab play（使用 mjlab 环境回放）
 
 mjlab 自带 play 脚本，通过导入 `go2_mjlab` 注册任务后即可使用。
 
 ### 1. Zero agent（测试环境）
 
 ```bash
-cd /home/lionrock/workspace/locomotion/My_unitree_go2_gym
+cd /home/yiz/workspace/src/locomotion/My_unitree_go2_gym
 python -c "import go2_mjlab; from mjlab.scripts.play import main; main()" \
-  Mjlab-Go2-Handstand --agent zero --num-envs 1 --no-terminations
+  Mjlab-Lite3-Handstand --agent zero --num-envs 1 --no-terminations
 ```
 
 ### 2. 加载本地 checkpoint
 
 ```bash
 python -c "import go2_mjlab; from mjlab.scripts.play import main; main()" \
-  Mjlab-Go2-Handstand \
-  --checkpoint-file wandb/run-20260501_065244-u766girr/files/model_14999.pt \
+  Mjlab-Lite3-Handstand \
+  --checkpoint-file logs/rsl_rl/lite3_handstand/<run>/model_14999.pt \
   --num-envs 1
 ```
 
@@ -25,8 +86,8 @@ python -c "import go2_mjlab; from mjlab.scripts.play import main; main()" \
 
 ```bash
 python -c "import go2_mjlab; from mjlab.scripts.play import main; main()" \
-  Mjlab-Go2-Handstand \
-  --wandb-run-path joystudy3/mjlab/u766girr \
+  Mjlab-Lite3-Handstand \
+  --wandb-run-path <entity>/<project>/<run_id> \
   --num-envs 1
 ```
 
