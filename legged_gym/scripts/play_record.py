@@ -49,6 +49,42 @@ def play_and_record(args):
     env_cfg.env.test = True
 
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
+
+    # Optionally override the env's _reset_dofs / _reset_root_states so the
+    # video starts from EXACTLY the default 4-paw stance.  Default training
+    # reset randomises `dof_pos = default * rand(0.5, 1.5)` which can make
+    # the start frame look like "the dog is already half-flipped".
+    if args.force_default_init:
+        import types
+        from isaacgym import gymtorch
+
+        def _reset_dofs_clean(self, env_ids):
+            self.dof_pos[env_ids] = self.default_dof_pos
+            self.dof_vel[env_ids] = 0.
+            env_ids_int32 = env_ids.to(dtype=torch.int32)
+            self.gym.set_dof_state_tensor_indexed(
+                self.sim,
+                gymtorch.unwrap_tensor(self.dof_state),
+                gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+        def _reset_root_states_clean(self, env_ids):
+            self.root_states[env_ids] = self.base_init_state
+            self.root_states[env_ids, 0:3] += self.env_origins[env_ids]
+            # Zero velocities (training default uses rand(-0.5, 0.5)).
+            self.root_states[env_ids, 7:13] = 0.
+            env_ids_int32 = env_ids.to(dtype=torch.int32)
+            self.gym.set_actor_root_state_tensor_indexed(
+                self.sim,
+                gymtorch.unwrap_tensor(self.root_states),
+                gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+        env._reset_dofs = types.MethodType(_reset_dofs_clean, env)
+        env._reset_root_states = types.MethodType(_reset_root_states_clean, env)
+        # Trigger reset on all envs so the patched versions take effect.
+        env.reset_idx(torch.arange(env.num_envs, device=env.device))
+        env.compute_observations()
+        print("[play_record] forced exact default init pose")
+
     obs = env.get_observations()
 
     # Build runner with FRESH weights (no resume) so the standard log-dir
@@ -361,6 +397,11 @@ def main():
                  "memory, then render with MuJoCo offscreen.  Use when "
                  "IsaacGym's GL backend can't init (typical on WSL2 or "
                  "DISPLAY-less ssh) — `create_camera_sensor returned -1`."},
+        {"name": "--force_default_init", "action": "store_true", "default": False,
+         "help": "Override training reset's `dof_pos = default * rand(0.5, 1.5)` "
+                 "and `vel = rand(-0.5, 0.5)` so the rollout starts from EXACTLY "
+                 "the 4-paw default pose at zero velocity.  Useful for clean "
+                 "demo videos."},
     ]
     args = gymutil.parse_arguments(
         description="IsaacGym headless replay + MP4 recorder",
