@@ -109,10 +109,15 @@ OBS_SCALE_ANG_VEL = 0.25
 OBS_SCALE_DOF_POS = 1.0
 OBS_SCALE_DOF_VEL = 0.05
 
-# Sim config: timestep=0.005, decimation=4 → 50 Hz control (matches env_cfgs).
+# Sim config.  Training uses sim.dt=0.005 + decimation=4 → CTRL_DT=0.020s
+# (50 Hz control loop).  We use a 5× finer sim.dt for higher physics
+# fidelity, but compensate with decimation=20 so the policy still ticks at
+# 50 Hz — matching training.  Any other combination breaks the deploy:
+# a finer-than-training control loop drives policy errors at 5× speed and
+# can NaN out an undertrained checkpoint within < 1 s.
 SIM_DT = 0.001
-DECIMATION = 4
-CTRL_DT = SIM_DT * DECIMATION
+DECIMATION = 20
+CTRL_DT = SIM_DT * DECIMATION   # = 0.020 s = 50 Hz, matches training
 
 # Initial pose: matches HANDSTAND_INIT_STATE.pos in lite3_constants.py.
 # Lite3 starts upright on four paws (TORSO body is anchored at z=0.30 in
@@ -166,6 +171,28 @@ class Actor(nn.Module):
     def act(self, obs_np: np.ndarray) -> np.ndarray:
         x = torch.from_numpy(obs_np).float().unsqueeze(0)
         return self.actor(x).squeeze(0).numpy()
+
+
+def _check_finite(name: str, arr: np.ndarray, **context) -> None:
+    """Halt with a useful traceback if `arr` has NaN/Inf.
+
+    NaN cascades silently in MuJoCo (you only get a generic CTRL warning a
+    fraction of a second after the actual blow-up), so we trap it at the
+    earliest point — right after the policy outputs an action or before
+    we hand it to the simulator.  The dump tells you which slot of which
+    quantity went bad and what the surrounding state looked like, so you
+    can tell whether the network blew up on its own or was fed an OOD obs.
+    """
+    bad = ~np.isfinite(arr)
+    if not bad.any():
+        return
+    np.set_printoptions(precision=4, suppress=True, linewidth=160)
+    msg = [f"\n[deploy] non-finite {name}; halting deploy."]
+    msg.append(f"  bad indices: {np.where(bad)[0].tolist()}")
+    msg.append(f"  values:      {arr}")
+    for k, v in context.items():
+        msg.append(f"  {k}: {v}")
+    raise FloatingPointError("\n".join(msg))
 
 
 # ---------------------------------------------------------------------------
@@ -422,11 +449,15 @@ def main():
 
     def step_once():
         nonlocal last_action
+        obs = build_obs()
+        _check_finite("obs", obs, t=data.time, base_z=data.qpos[2])
         if args.null_policy:
             action = np.zeros(12, dtype=np.float64)
         else:
-            action = actor.act(build_obs())
+            action = actor.act(obs)
+        _check_finite("action", action, t=data.time, last_action=last_action)
         target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
+        _check_finite("target_q", target_q, t=data.time, action=action)
         data.ctrl[act_ids] = target_q
         for _ in range(DECIMATION):
             mujoco.mj_step(model, data)
@@ -438,11 +469,14 @@ def main():
         print(f"  step  base_z  grav_b_x  grav_b_z  max|a|     mean|dq|")
         for i in range(args.summary):
             obs = build_obs()
+            _check_finite("obs", obs, step=i, t=data.time)
             if args.null_policy:
                 action = np.zeros(12)
             else:
                 action = actor.act(obs)
+            _check_finite("action", action, step=i, t=data.time)
             target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
+            _check_finite("target_q", target_q, step=i, action=action)
             data.ctrl[act_ids] = target_q
             for _ in range(DECIMATION):
                 mujoco.mj_step(model, data)
