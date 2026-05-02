@@ -131,6 +131,106 @@ def play_and_record(args):
         print(f"\n=== TRACE done.  Final base_z={env.root_states[0, 2].item():.4f}m ===")
         return
 
+    # ------------------------------------------------------------------
+    # Trajectory-replay mode: run IsaacGym physics headless, dump
+    # (base_pos, base_quat, dof_pos) at each step, then re-render the
+    # captured trajectory via MuJoCo's offscreen renderer.  Bypasses
+    # IsaacGym's GL backend entirely (which can't initialise on headless
+    # servers without an X11 display, e.g. WSL2 or DISPLAY-less ssh).
+    # ------------------------------------------------------------------
+    if args.render_via_mujoco:
+        from pathlib import Path
+        import cv2
+        import mujoco
+
+        repo_root = Path(__file__).resolve().parents[2]
+        mjcf_path = repo_root / "go2_mjlab" / "robots" / "xmls" / "lite3.xml"
+        if not mjcf_path.exists():
+            raise FileNotFoundError(f"lite3 MJCF not found at {mjcf_path}")
+
+        # MJCF joint order — must match IsaacGym dof_names (verified earlier).
+        JOINT_NAMES_MJCF = [
+            "FL_HipX_joint", "FL_HipY_joint", "FL_Knee_joint",
+            "FR_HipX_joint", "FR_HipY_joint", "FR_Knee_joint",
+            "HL_HipX_joint", "HL_HipY_joint", "HL_Knee_joint",
+            "HR_HipX_joint", "HR_HipY_joint", "HR_Knee_joint",
+        ]
+
+        # Step 1: roll out in IsaacGym, dump physics state per frame.
+        n_frames = int(args.frames)
+        traj_pos = np.zeros((n_frames, 3), dtype=np.float64)
+        traj_quat_xyzw = np.zeros((n_frames, 4), dtype=np.float64)  # IsaacGym order
+        traj_dof = np.zeros((n_frames, 12), dtype=np.float64)
+        print(f"[play_record] step 1/2: rolling out {n_frames} frames in "
+              f"IsaacGym headless...")
+        for step in range(n_frames):
+            traj_pos[step] = env.root_states[0, 0:3].cpu().numpy()
+            traj_quat_xyzw[step] = env.root_states[0, 3:7].cpu().numpy()
+            traj_dof[step] = env.dof_pos[0].cpu().numpy()
+            actions = policy(obs.detach())
+            obs, _, rews, dones, infos = env.step(actions.detach())
+            if (step + 1) % int(round(args.video_fps)) == 0:
+                qx, qy, qz, qw = traj_quat_xyzw[step]
+                # body-frame gravity x-component as orientation probe.
+                r00 = 1 - 2 * (qy * qy + qz * qz)
+                r02 = 2 * (qx * qz - qy * qw)
+                grav_b_x = -r02
+                print(f"  step {step + 1:4d}  base_z={traj_pos[step, 2]:.3f}m  "
+                      f"grav_b_x={grav_b_x:+.2f}")
+
+        # Step 2: render the captured trajectory in MuJoCo.
+        print(f"[play_record] step 2/2: rendering {n_frames} frames in "
+              f"MuJoCo (offscreen)...")
+        model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+        data = mujoco.MjData(model)
+
+        joint_qposadr = []
+        for jn in JOINT_NAMES_MJCF:
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jn)
+            if jid < 0:
+                raise RuntimeError(f"joint {jn} not found in {mjcf_path}")
+            joint_qposadr.append(int(model.jnt_qposadr[jid]))
+
+        # Bigger offscreen framebuffer for high-res rendering.
+        model.vis.global_.offwidth = args.video_width
+        model.vis.global_.offheight = args.video_height
+
+        renderer = mujoco.Renderer(
+            model, height=args.video_height, width=args.video_width)
+        cam = mujoco.MjvCamera()
+        cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+        cam.distance = 2.0
+        cam.elevation = -15.0
+        cam.azimuth = 90.0
+
+        out_path = os.path.abspath(os.path.expanduser(args.video))
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(
+            out_path, fourcc, float(args.video_fps),
+            (args.video_width, args.video_height))
+        if not writer.isOpened():
+            raise RuntimeError(f"failed to open MP4 writer: {out_path}")
+
+        for i in range(n_frames):
+            # Free joint: qpos[0:3] = pos, qpos[3:7] = quat (MuJoCo wxyz).
+            data.qpos[0:3] = traj_pos[i]
+            qx, qy, qz, qw = traj_quat_xyzw[i]
+            data.qpos[3:7] = [qw, qx, qy, qz]
+            for j, qposadr in enumerate(joint_qposadr):
+                data.qpos[qposadr] = traj_dof[i, j]
+            mujoco.mj_forward(model, data)
+            cam.lookat[:] = data.qpos[0:3]
+            renderer.update_scene(data, camera=cam)
+            frame = renderer.render()
+            writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+
+        writer.release()
+        renderer.close()
+        print(f"[play_record] saved {out_path}  ({n_frames} frames @ "
+              f"{args.video_fps} fps)")
+        return
+
     # Offscreen camera attached to env 0 — chase view of the trunk.
     cam_props = gymapi.CameraProperties()
     cam_props.width = args.video_width
@@ -256,6 +356,11 @@ def main():
          "help": "With --trace, print only one line per step: base_z, grav_b, "
                  "max action, mean |dq|, done flag.  Lets you see if the "
                  "rollout stabilizes or diverges over many steps."},
+        {"name": "--render_via_mujoco", "action": "store_true", "default": False,
+         "help": "Run physics in IsaacGym headless, dump trajectory to "
+                 "memory, then render with MuJoCo offscreen.  Use when "
+                 "IsaacGym's GL backend can't init (typical on WSL2 or "
+                 "DISPLAY-less ssh) — `create_camera_sensor returned -1`."},
     ]
     args = gymutil.parse_arguments(
         description="IsaacGym headless replay + MP4 recorder",
@@ -266,7 +371,10 @@ def main():
     # rendering — i.e. trace mode.  For video, leave graphics enabled so
     # camera sensors work, but still no viewer (no X11 window).
     args.headless = True
-    if args.trace > 0:
+    # IsaacGym's GL backend is not used in trace or render_via_mujoco modes,
+    # so disable the graphics device — avoids the create_camera_sensor and
+    # X11 init paths that crash on headless servers.
+    if args.trace > 0 or args.render_via_mujoco:
         args.graphics_device_id = -1
     args.sim_device_id = args.compute_device_id
     args.sim_device = args.sim_device_type
