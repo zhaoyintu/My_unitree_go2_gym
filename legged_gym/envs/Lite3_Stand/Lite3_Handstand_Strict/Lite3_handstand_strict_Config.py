@@ -80,6 +80,17 @@ class Lite3Cfg_LeggedstandStrict(Lite3Cfg_Leggedstand):
             tracking_ang_vel_zero = -1.5
 
     class domain_rand(Lite3Cfg_Leggedstand.domain_rand):
+        # ---- Push robots: dampen the velocity envelope ----------------
+        # Base task uses 1.0 m/s pushes every 8 s, which on a 20 s episode
+        # is 2-3 hits per episode at near-real-life impulse magnitudes.
+        # For a half-trained handstand this is too aggressive — the dog
+        # gets knocked down before it has time to learn balance, the
+        # batch-mean rew_hanstand stays low, and the gated rewards never
+        # activate.  Reduce to ~0.4 m/s (matches Go2_Handstand defaults
+        # which converged at this push level).
+        max_push_vel_xy = 0.4
+        max_push_ang_vel = 0.4
+
         # ---- 3. Moderately wider DR for sim2real robustness -----------
         # Initial strict v2 widened DR aggressively (friction 2×,
         # joint_damping 2.5× upper bound), which more than doubled the

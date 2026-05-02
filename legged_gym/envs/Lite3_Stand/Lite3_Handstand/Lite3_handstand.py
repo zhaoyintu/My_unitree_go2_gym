@@ -281,7 +281,13 @@ class Lite3_legstand(BaseTask):
 
             for s in range(len(props)):
                 props[s].friction = self.friction_coeffs[env_id]
-        
+            # Mirror the per-env sample into `env_frictions` so the critic's
+            # privileged observation actually sees the friction value used
+            # by physics — without this assignment the buffer stays at the
+            # zeros it was initialised with (line ~771) even though
+            # `compute_observations` includes it in `privileged_obs`.
+            self.env_frictions[env_id] = self.friction_coeffs[env_id]
+
         if self.cfg.domain_rand.randomize_restitution:
             if env_id==0:
                 # prepare friction randomization
@@ -811,7 +817,14 @@ class Lite3_legstand(BaseTask):
 
 
         self.target_gravity=torch.tensor(self.cfg.asset.target_gravity,dtype=torch.float,device=self.device,requires_grad=False)
-        self.rew_hanstand=torch.zeros(1,dtype=torch.float,device=self.device,requires_grad=False)
+        # Per-env handstand-quality gate.  Was scalar (`torch.zeros(1, ...)`)
+        # which made `(rew_hanstand > 0.78)` a single boolean shared by the
+        # entire batch — once any envs fall, the batch-average drops below
+        # the threshold and ALL gated rewards (tracking_*, contact,
+        # feet_clearance, default_pos_reward, ang_xz, etc.) zero out at
+        # once.  Per-env tensor lets each env independently fire its gate.
+        self.rew_hanstand = torch.zeros(self.num_envs, dtype=torch.float,
+                                        device=self.device, requires_grad=False)
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
             Otherwise create a grid.
@@ -938,7 +951,10 @@ class Lite3_legstand(BaseTask):
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        self.rew_hanstand=torch.mean(torch.exp(-torch.abs(base_height - self.cfg.rewards.base_height_target)*10))
+        # Per-env handstand-quality value (NOT mean'd — each env independent).
+        # Used as the gate for tracking_*, contact, feet_clearance,
+        # feet_air_time, ang_xz, symmetric_joints, default_pos_reward.
+        self.rew_hanstand = torch.exp(-torch.abs(base_height - self.cfg.rewards.base_height_target) * 10)
         return torch.exp(-torch.abs(base_height - self.cfg.rewards.base_height_target)*5)
 
     def _reward_torques(self):
@@ -984,31 +1000,31 @@ class Lite3_legstand(BaseTask):
         x_error = torch.square(self.commands[:, 0] - self.base_lin_vel[:, 2])#站立起来的话，本体的x轴对应世界系的z，本体z轴对应世界系的-x
         y_error = torch.square(self.commands[:, 1] - self.base_lin_vel[:, 1])
         # print(torch.mean(self.rew_hanstand),self.rew_hanstand.shape)
-        return torch.exp(-(y_error+x_error)/self.cfg.rewards.tracking_sigma)*(torch.mean(self.rew_hanstand)>0.78)
+        return torch.exp(-(y_error+x_error)/self.cfg.rewards.tracking_sigma)*(self.rew_hanstand>0.78)
     
     def _reward_tracking_lin_vel_zero(self):
         x_error = torch.square(self.commands[:, 0] - self.base_lin_vel[:, 2])#站立起来的话，本体的x轴对应世界系的z，本体z轴对应世界系的-x
         y_error = torch.square(self.commands[:, 1] - self.base_lin_vel[:, 1])
         # print(torch.mean(self.rew_hanstand),self.rew_hanstand.shape)
-        return torch.exp(-(y_error+x_error)/self.cfg.rewards.tracking_sigma)*(torch.mean(self.rew_hanstand)>0.78)*(torch.norm(self.commands[:,:2],dim=-1)<0.1)   
+        return torch.exp(-(y_error+x_error)/self.cfg.rewards.tracking_sigma)*(self.rew_hanstand>0.78)*(torch.norm(self.commands[:,:2],dim=-1)<0.1)   
     
 
     def _reward_tracking_ang_vel(self):
         # Tracking of angular velocity commands (yaw) 
         ang_vel_error = torch.square(self.commands[:, 2] + self.base_ang_vel[:, 0])
-        return torch.exp(-ang_vel_error/self.cfg.rewards.tracking_sigma)*(torch.mean(self.rew_hanstand)>0.78)
+        return torch.exp(-ang_vel_error/self.cfg.rewards.tracking_sigma)*(self.rew_hanstand>0.78)
 
     def _reward_tracking_ang_vel_zero(self):
         # Tracking of angular velocity commands (yaw) 
         ang_vel_error = torch.square(self.commands[:, 2] + self.base_ang_vel[:, 0])
-        return ang_vel_error*(torch.mean(self.rew_hanstand)>0.78)*(torch.abs(self.commands[:,2])<0.1)   
+        return ang_vel_error*(self.rew_hanstand>0.78)*(torch.abs(self.commands[:,2])<0.1)   
     
     def _reward_default_pos(self):
         # Penalize motion at zero commands
         return torch.sum(torch.abs(self.dof_pos - self.descire_joint_pos), dim=1)
     def _reward_default_pos_reward(self):
         # Penalize motion at zero commands
-        return torch.exp(-torch.sum(torch.abs(self.dof_pos - self.descire_joint_pos)[:,6:], dim=1))*(torch.mean(self.rew_hanstand)>0.78)
+        return torch.exp(-torch.sum(torch.abs(self.dof_pos - self.descire_joint_pos)[:,6:], dim=1))*(self.rew_hanstand>0.78)
     
     def _reward_feet_contact_forces(self):
         # penalize high contact forces
@@ -1071,7 +1087,7 @@ class Lite3_legstand(BaseTask):
         # print(rew[0],torch.sum(torch.abs(left_feet_height-target_height),dim=1)[0])
         rew+=torch.exp(-torch.abs(right_feet_height-target_height)*10)*swing_mask[:,1]
         # print(rew.shape,left_feet_height.shape)
-        return rew*(torch.mean(self.rew_hanstand)>0.78)
+        return rew*(self.rew_hanstand>0.78)
 
 
 

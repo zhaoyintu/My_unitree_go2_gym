@@ -82,7 +82,7 @@ class Lite3_legstand_strict(Lite3_legstand):
     def _reward_default_pos_reward(self):
         err = self.dof_pos - self.descire_joint_pos        # [num_envs, 12]
         return torch.exp(-torch.sum(torch.abs(err), dim=1)) * (
-            torch.mean(self.rew_hanstand) > 0.78
+            (self.rew_hanstand > 0.78)
         )
 
     # ------------------------------------------------------------------
@@ -98,5 +98,5 @@ class Lite3_legstand_strict(Lite3_legstand):
         x_error = torch.square(self.commands[:, 0] - self.base_lin_vel[:, 2])
         y_error = torch.square(self.commands[:, 1] - self.base_lin_vel[:, 1])
         return (x_error + y_error) * (
-            torch.mean(self.rew_hanstand) > 0.78
+            (self.rew_hanstand > 0.78)
         ) * (torch.norm(self.commands[:, :2], dim=-1) < 0.1)
