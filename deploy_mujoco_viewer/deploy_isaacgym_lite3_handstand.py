@@ -11,7 +11,7 @@ Differences vs `deploy_mjlab_lite3_handstand.py`:
   * No empirical normalizer.  IsaacGym applies fixed `obs_scales` from the
     config; the same scales are reproduced here.
   * No frame stack.  IsaacGym Lite3 uses single-frame 48-dim obs (mjlab uses
-    480-dim 10-frame stack).
+    450-dim 10-frame stack after removing actor base linear velocity).
   * Obs layout matches `Go2_legstand.compute_observations` —
     zeros(2) + stand_command(1) + ang_vel*scale + projected_gravity +
     commands*scales + (dof_pos - default)*scale + dof_vel*scale + last_action.

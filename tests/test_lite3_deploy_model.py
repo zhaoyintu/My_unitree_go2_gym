@@ -35,6 +35,15 @@ def _actuator_id(model: mujoco.MjModel, name: str) -> int:
 
 
 class Lite3DeployModelTest(unittest.TestCase):
+    def test_policy_observation_layout_matches_real_robot_available_terms(self) -> None:
+        module = _load_module()
+        source = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertEqual(module.NUM_SINGLE_OBS, 45)
+        self.assertEqual(module.NUM_OBS, 450)
+        self.assertNotIn('data.sensor("imu_lin_vel")', source)
+        self.assertIn('data.sensor("imu_ang_vel")', source)
+
     def test_build_model_matches_training_full_collision_cfg(self) -> None:
         module = _load_module()
         model = module.build_model()

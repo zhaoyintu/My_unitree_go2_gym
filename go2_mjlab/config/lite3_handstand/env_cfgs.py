@@ -114,13 +114,9 @@ def unitree_lite3_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         fields=("found",), reduce="none", num_slots=1, history_length=4,
     )
 
-    # Observations — same dim layout as Go2 (48 per frame, history 10).
+    # Observations — actor excludes base linear velocity because the real
+    # robot cannot measure it directly. Critic keeps it as privileged state.
     actor_terms = {
-        "base_lin_vel": ObservationTermCfg(
-            func=envs_mdp.builtin_sensor,
-            params={"sensor_name": "robot/imu_lin_vel"},
-            noise=Unoise(n_min=-0.2, n_max=0.2),
-        ),
         "base_ang_vel": ObservationTermCfg(
             func=envs_mdp.builtin_sensor,
             params={"sensor_name": "robot/imu_ang_vel"},

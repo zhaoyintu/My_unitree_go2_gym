@@ -32,6 +32,16 @@ class Lite3HandstandStaticTest(unittest.TestCase):
         self.assertIn('func=go2_mdp.handstand_ang_vel_yz', source)
         self.assertNotIn('"ang_xz_penalty"', source)
 
+    def test_lite3_actor_obs_excludes_unavailable_base_linear_velocity(self) -> None:
+        source = _source(LITE3_ENV_CFG)
+        actor_block = source.split("actor_terms = {", 1)[1].split("critic_terms = {", 1)[0]
+        critic_block = source.split("critic_terms = {", 1)[1].split("observations = {", 1)[0]
+
+        self.assertNotIn('"base_lin_vel"', actor_block)
+        self.assertNotIn('"robot/imu_lin_vel"', actor_block)
+        self.assertIn('"base_lin_vel"', critic_block)
+        self.assertIn('"robot/imu_lin_vel"', critic_block)
+
     def test_lite3_feet_clearance_tracks_front_stance_feet(self) -> None:
         source = _source(LITE3_ENV_CFG)
         feet_clearance_block = source.split('"feet_clearance": RewardTermCfg(', 1)[1].split(

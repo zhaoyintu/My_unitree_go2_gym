@@ -84,10 +84,11 @@ ACTION_SCALE = np.array([
     0.125, 0.25, 0.25,   # HR
 ], dtype=np.float64)
 
-# Observation: same layout as Go2 (lin_vel + ang_vel + grav + cmd + qpos + qvel + last_act).
-NUM_SINGLE_OBS = 48          # 3 + 3 + 3 + 3 + 12 + 12 + 12
+# Observation: real-robot-safe actor layout
+# (ang_vel + grav + cmd + qpos + qvel + last_act).
+NUM_SINGLE_OBS = 45          # 3 + 3 + 3 + 12 + 12 + 12
 FRAME_STACK = 10
-NUM_OBS = NUM_SINGLE_OBS * FRAME_STACK   # 480
+NUM_OBS = NUM_SINGLE_OBS * FRAME_STACK   # 450
 
 # Sim config: timestep=0.005, decimation=4 → 50 Hz control (matches env_cfgs).
 SIM_DT = 0.005
@@ -385,17 +386,15 @@ def main():
 
     # Per-term history buffers (length=FRAME_STACK, oldest first).
     hist = {k: deque(maxlen=FRAME_STACK) for k in
-            ("lin_vel", "ang_vel", "grav", "cmd",
+            ("ang_vel", "grav", "cmd",
              "joint_pos", "joint_vel", "act")}
 
     def make_terms():
-        lin_vel = data.sensor("imu_lin_vel").data.copy()
         ang_vel = data.sensor("imu_ang_vel").data.copy()
         quat = data.qpos[3:7].copy()  # MuJoCo quat is (w, x, y, z)
         grav = quat_rotate_inverse(quat, np.array([0.0, 0.0, -1.0]))
         qpos, qvel = joint_state(model, data)
         return [
-            lin_vel.astype(np.float32),
             ang_vel.astype(np.float32),
             grav.astype(np.float32),
             cmd.astype(np.float32),
