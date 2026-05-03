@@ -37,6 +37,9 @@ from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabStaticReward.Lite3_handsta
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabGatedTrackingReward.Lite3_handstand_mjlab_gated_tracking_reward import Lite3_legstand_mjlab_gated_tracking_reward
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabGatedTrackingReward.Lite3_handstand_mjlab_gated_tracking_reward_Config import Lite3Cfg_MjlabGatedTrackingReward, Lite3CfgPPO_MjlabGatedTrackingReward
 
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabGatedTrackingFrameStack.Lite3_handstand_mjlab_gated_tracking_frame_stack import Lite3_legstand_mjlab_gated_tracking_frame_stack
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabGatedTrackingFrameStack.Lite3_handstand_mjlab_gated_tracking_frame_stack_Config import Lite3Cfg_MjlabGatedTrackingFrameStack, Lite3CfgPPO_MjlabGatedTrackingFrameStack
+
 from legged_gym.utils.task_registry import task_registry
 
 
@@ -63,5 +66,8 @@ task_registry.register( "lite3_handstand_mjlab_static_reward", Lite3_legstand_mj
 # High-tracking variant where command tracking is still soft-gated by
 # handstand quality.
 task_registry.register( "lite3_handstand_mjlab_gated_tracking_reward", Lite3_legstand_mjlab_gated_tracking_reward, Lite3Cfg_MjlabGatedTrackingReward(), Lite3CfgPPO_MjlabGatedTrackingReward())
+# Same reward as `lite3_handstand_mjlab_gated_tracking_reward`, but with
+# 10-frame actor and critic observation stacks.
+task_registry.register( "lite3_handstand_mjlab_gated_tracking_frame_stack", Lite3_legstand_mjlab_gated_tracking_frame_stack, Lite3Cfg_MjlabGatedTrackingFrameStack(), Lite3CfgPPO_MjlabGatedTrackingFrameStack())
 
 print("注册的任务:  ",task_registry.task_classes)
