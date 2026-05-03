@@ -55,9 +55,14 @@ class Lite3IsaacGymMjlabGatedTrackingFrameStackStaticTest(unittest.TestCase):
         self.assertIn("Lite3Cfg_MjlabGatedTrackingReward", source)
         self.assertIn("frame_stack = 10", config_source)
         self.assertIn("c_frame_stack = 10", config_source)
-        self.assertIn("num_observations = int(frame_stack * num_single_obs)", config_source)
+        self.assertIn("num_observations = int(", config_source)
         self.assertIn(
-            "num_privileged_obs = int(c_frame_stack * single_num_privileged_obs)",
+            "Lite3Cfg_MjlabGatedTrackingReward.env.num_single_obs",
+            config_source,
+        )
+        self.assertIn("num_privileged_obs = int(", config_source)
+        self.assertIn(
+            "Lite3Cfg_MjlabGatedTrackingReward.env.single_num_privileged_obs",
             config_source,
         )
         self.assertIn(

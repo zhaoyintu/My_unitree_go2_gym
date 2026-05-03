@@ -10,8 +10,13 @@ class Lite3Cfg_MjlabGatedTrackingFrameStack(Lite3Cfg_MjlabGatedTrackingReward):
     class env(Lite3Cfg_MjlabGatedTrackingReward.env):
         frame_stack = 10
         c_frame_stack = 10
-        num_observations = int(frame_stack * num_single_obs)
-        num_privileged_obs = int(c_frame_stack * single_num_privileged_obs)
+        num_observations = int(
+            frame_stack * Lite3Cfg_MjlabGatedTrackingReward.env.num_single_obs
+        )
+        num_privileged_obs = int(
+            c_frame_stack
+            * Lite3Cfg_MjlabGatedTrackingReward.env.single_num_privileged_obs
+        )
 
 
 class Lite3CfgPPO_MjlabGatedTrackingFrameStack(Lite3CfgPPO_MjlabGatedTrackingReward):
