@@ -31,6 +31,9 @@ from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Strict.Lite3_handstand_strict_C
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabReward.Lite3_handstand_mjlab_reward import Lite3_legstand_mjlab_reward
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabReward.Lite3_handstand_mjlab_reward_Config import Lite3Cfg_MjlabReward, Lite3CfgPPO_MjlabReward
 
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabStaticReward.Lite3_handstand_mjlab_static_reward import Lite3_legstand_mjlab_static_reward
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabStaticReward.Lite3_handstand_mjlab_static_reward_Config import Lite3Cfg_MjlabStaticReward, Lite3CfgPPO_MjlabStaticReward
+
 from legged_gym.utils.task_registry import task_registry
 
 
@@ -51,5 +54,8 @@ task_registry.register( "lite3_handstand_strict", Lite3_legstand_strict, Lite3Cf
 # Reward-only variant: keeps the IsaacGym DR/control stack but aligns the
 # Lite3 handstand reward recipe with `Mjlab-Lite3-Handstand`.
 task_registry.register( "lite3_handstand_mjlab_reward", Lite3_legstand_mjlab_reward, Lite3Cfg_MjlabReward(), Lite3CfgPPO_MjlabReward())
+# Static-first reward-only variant for A/B comparison against
+# `lite3_handstand_mjlab_reward`.
+task_registry.register( "lite3_handstand_mjlab_static_reward", Lite3_legstand_mjlab_static_reward, Lite3Cfg_MjlabStaticReward(), Lite3CfgPPO_MjlabStaticReward())
 
 print("注册的任务:  ",task_registry.task_classes)
