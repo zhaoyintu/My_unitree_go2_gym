@@ -31,6 +31,9 @@ from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Strict.Lite3_handstand_strict_C
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Pose.Lite3_handstand_pose import Lite3_legstand_pose
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Pose.Lite3_handstand_pose_Config import Lite3Cfg_LeggedstandPose, Lite3CfgPPO_LeggedstandPose
 
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Mjlab.Lite3_handstand_mjlab import Lite3_legstand_mjlab
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_Mjlab.Lite3_handstand_mjlab_Config import Lite3Cfg_LeggedstandMjlab, Lite3CfgPPO_LeggedstandMjlab
+
 from legged_gym.utils.task_registry import task_registry
 
 
@@ -53,5 +56,12 @@ task_registry.register( "lite3_handstand_strict", Lite3_legstand_strict, Lite3Cf
 # but joint pose drifts from desire" failure mode of strict.  Logs to a
 # separate folder via experiment_name='lite3_handstand_pose'.
 task_registry.register( "lite3_handstand_pose", Lite3_legstand_pose, Lite3Cfg_LeggedstandPose(), Lite3CfgPPO_LeggedstandPose())
+# Mjlab-aligned variant: rewards mirror feat/lite3-mjlab's Mjlab-Lite3-Handstand
+# task as closely as IsaacGym allows.  Drops the rew_hanstand>0.78 gate from
+# tracking_*/contact/feet_*/symmetric_joints/ang_xz/default_pos_reward, adds
+# a +1.0 alive baseline, bumps default_pos -0.05 → -1.0, and removes TORSO
+# from termination (penalty-only).  Targets the same "tucked half-handstand"
+# failure as pose, via reward landscape changes rather than gate threshold.
+task_registry.register( "lite3_handstand_mjlab", Lite3_legstand_mjlab, Lite3Cfg_LeggedstandMjlab(), Lite3CfgPPO_LeggedstandMjlab())
 
 print("注册的任务:  ",task_registry.task_classes)
