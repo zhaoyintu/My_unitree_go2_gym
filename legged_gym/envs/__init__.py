@@ -34,6 +34,9 @@ from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabReward.Lite3_handstand_mjl
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabStaticReward.Lite3_handstand_mjlab_static_reward import Lite3_legstand_mjlab_static_reward
 from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabStaticReward.Lite3_handstand_mjlab_static_reward_Config import Lite3Cfg_MjlabStaticReward, Lite3CfgPPO_MjlabStaticReward
 
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabGatedTrackingReward.Lite3_handstand_mjlab_gated_tracking_reward import Lite3_legstand_mjlab_gated_tracking_reward
+from legged_gym.envs.Lite3_Stand.Lite3_Handstand_MjlabGatedTrackingReward.Lite3_handstand_mjlab_gated_tracking_reward_Config import Lite3Cfg_MjlabGatedTrackingReward, Lite3CfgPPO_MjlabGatedTrackingReward
+
 from legged_gym.utils.task_registry import task_registry
 
 
@@ -57,5 +60,8 @@ task_registry.register( "lite3_handstand_mjlab_reward", Lite3_legstand_mjlab_rew
 # Static-first reward-only variant for A/B comparison against
 # `lite3_handstand_mjlab_reward`.
 task_registry.register( "lite3_handstand_mjlab_static_reward", Lite3_legstand_mjlab_static_reward, Lite3Cfg_MjlabStaticReward(), Lite3CfgPPO_MjlabStaticReward())
+# High-tracking variant where command tracking is still soft-gated by
+# handstand quality.
+task_registry.register( "lite3_handstand_mjlab_gated_tracking_reward", Lite3_legstand_mjlab_gated_tracking_reward, Lite3Cfg_MjlabGatedTrackingReward(), Lite3CfgPPO_MjlabGatedTrackingReward())
 
 print("注册的任务:  ",task_registry.task_classes)
