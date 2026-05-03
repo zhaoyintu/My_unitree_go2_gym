@@ -24,6 +24,10 @@ class Lite3_legstand_mjlab_gated_tracking_frame_stack(
 
     def _init_buffers(self):
         super()._init_buffers()
+        self.single_noise_scale_vec = self.noise_scale_vec[
+            :self.cfg.env.num_single_obs
+        ].clone()
+        self.noise_scale_vec = self.single_noise_scale_vec
         self.obs_history = deque(maxlen=self.cfg.env.frame_stack)
         self.critic_history = deque(maxlen=self.cfg.env.c_frame_stack)
         for _ in range(self.cfg.env.frame_stack):
