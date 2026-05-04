@@ -127,6 +127,28 @@ LITE3_HANDSTAND_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
     armature=KNEE_ACTUATOR.reflected_inertia,
 )
 
+# RLDeploy handstand PD: match the C++ `rl_deploy_handstand` command contract.
+# The deploy MuJoCo XML has motor actuators and no reflected joint armature; the
+# C++ loop computes tau = kp * (q_des - q) + kd * (0 - dq), clipped to 30 Nm.
+LITE3_RLDEPLOY_HANDSTAND_HIPX_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+    target_names_expr=(".*HipX_joint",),
+    stiffness=40.0,
+    damping=1.0,
+    effort_limit=HIPX_ACTUATOR.effort_limit,
+)
+LITE3_RLDEPLOY_HANDSTAND_HIPY_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+    target_names_expr=(".*HipY_joint",),
+    stiffness=40.0,
+    damping=1.0,
+    effort_limit=HIPY_ACTUATOR.effort_limit,
+)
+LITE3_RLDEPLOY_HANDSTAND_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+    target_names_expr=(".*Knee_joint",),
+    stiffness=40.0,
+    damping=1.0,
+    effort_limit=KNEE_ACTUATOR.effort_limit,
+)
+
 ##
 # Keyframes.
 ##
@@ -185,6 +207,20 @@ FULL_COLLISION = CollisionCfg(
     friction={_foot_regex: (1, 5e-3, 5e-4)},
 )
 
+# Match the Lite3 XML used by `Lite3_rl_deploy`:
+# collision geoms use contype=0/conaffinity=1, condim=3, solref=0.005 1,
+# friction=1 0.01 0.01.  This disables robot self-collision while preserving
+# terrain contact through the terrain geom's contype.
+RLDEPLOY_COLLISION = CollisionCfg(
+    geom_names_expr=(".*_collision",),
+    contype=0,
+    conaffinity=1,
+    condim=3,
+    priority=0,
+    friction=(1.0, 0.01, 0.01),
+    solref=(0.005, 1),
+)
+
 ##
 # Final config.
 ##
@@ -207,6 +243,15 @@ LITE3_HANDSTAND_ARTICULATION = EntityArticulationInfoCfg(
     soft_joint_pos_limit_factor=0.9,
 )
 
+LITE3_RLDEPLOY_HANDSTAND_ARTICULATION = EntityArticulationInfoCfg(
+    actuators=(
+        LITE3_RLDEPLOY_HANDSTAND_HIPX_ACTUATOR_CFG,
+        LITE3_RLDEPLOY_HANDSTAND_HIPY_ACTUATOR_CFG,
+        LITE3_RLDEPLOY_HANDSTAND_KNEE_ACTUATOR_CFG,
+    ),
+    soft_joint_pos_limit_factor=0.9,
+)
+
 
 def get_lite3_robot_cfg() -> EntityCfg:
     """Lite3 with standard locomotion PD gains (Kp=30)."""
@@ -225,6 +270,16 @@ def get_lite3_handstand_robot_cfg() -> EntityCfg:
         collisions=(FULL_COLLISION,),
         spec_fn=get_spec,
         articulation=LITE3_HANDSTAND_ARTICULATION,
+    )
+
+
+def get_lite3_rldeploy_handstand_robot_cfg() -> EntityCfg:
+    """Lite3 handstand robot with dynamics aligned to `rl_deploy_handstand`."""
+    return EntityCfg(
+        init_state=HANDSTAND_INIT_STATE,
+        collisions=(RLDEPLOY_COLLISION,),
+        spec_fn=get_spec,
+        articulation=LITE3_RLDEPLOY_HANDSTAND_ARTICULATION,
     )
 
 

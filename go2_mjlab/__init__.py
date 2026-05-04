@@ -26,6 +26,12 @@ from go2_mjlab.config.lite3_handstand.rl_cfg import (
     unitree_lite3_handstand_ppo_runner_cfg,
     unitree_lite3_handstand_robust_ppo_runner_cfg,
 )
+from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
+    unitree_lite3_handstand_rldeploy_env_cfg,
+)
+from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
+    unitree_lite3_handstand_rldeploy_ppo_runner_cfg,
+)
 from mjlab.tasks.registry import register_mjlab_task
 
 # Flat terrain velocity tracking (trot)
@@ -98,4 +104,12 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_robust_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_robust_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_robust_ppo_runner_cfg(),
+)
+
+# Lite3 handstand aligned with the C++ rl_deploy_handstand policy contract
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy",
+    env_cfg=unitree_lite3_handstand_rldeploy_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_ppo_runner_cfg(),
 )
