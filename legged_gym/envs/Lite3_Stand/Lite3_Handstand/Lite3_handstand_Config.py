@@ -124,7 +124,7 @@ class Lite3Cfg_Leggedstand(LeggedRobotCfg):
         fix_base_link = False
         default_dof_drive_mode = 3
         replace_cylinder_with_capsule = True
-        flip_visual_attachments = True
+        flip_visual_attachments = False
         density = 0.001
         angular_damping = 0.
         linear_damping = 0.

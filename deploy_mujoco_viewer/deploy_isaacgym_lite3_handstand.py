@@ -195,11 +195,33 @@ def _check_finite(name: str, arr: np.ndarray, **context) -> None:
     raise FloatingPointError("\n".join(msg))
 
 
+def _set_array_field(field, values) -> None:
+    for i, value in enumerate(values):
+        field[i] = value
+
+
+def apply_rldeploy_collision_cfg(spec: mujoco.MjSpec) -> None:
+    """Apply Lite3 RLDeploy collision settings to collision geoms."""
+    for geom in spec.geoms:
+        if not geom.name.endswith("_collision"):
+            geom.contype = 0
+            geom.conaffinity = 0
+            continue
+
+        geom.contype = 0
+        geom.conaffinity = 1
+        geom.condim = 3
+        geom.priority = 0
+        _set_array_field(geom.friction, (1.0, 0.01, 0.01))
+        _set_array_field(geom.solref, (0.005, 1.0))
+
+
 # ---------------------------------------------------------------------------
-# Build mujoco model: lite3.xml + ground + PD position actuators
+# Build mujoco model: lite3.xml + ground + motor actuators (RLDeploy-aligned)
 # ---------------------------------------------------------------------------
 def build_model() -> mujoco.MjModel:
     spec = mujoco.MjSpec.from_file(str(LITE3_XML))
+    apply_rldeploy_collision_cfg(spec)
 
     # Bigger offscreen framebuffer so `mujoco.Renderer` can produce 1080p+ frames.
     spec.visual.global_.offwidth = 1920
@@ -229,35 +251,14 @@ def build_model() -> mujoco.MjModel:
         type=mujoco.mjtLightType.mjLIGHT_DIRECTIONAL,
     )
 
-    # Lite3's MJCF ships bare <motor> actuators (one per joint, named
-    # FL_HipX, FL_HipY, ... — same joint name minus the "_joint" suffix).
-    # Re-purpose them in place into PD position actuators so we can drive
-    # joints with target setpoints (matches mjlab BuiltinPositionActuator).
+    # Keep <motor> actuators and clip ctrl to effort limits; torque PD is
+    # computed externally in the control loop (matches RLDeploy deploy stack).
     name_to_idx = {a.name: i for i, a in enumerate(spec.actuators)}
     for i, jn in enumerate(JOINT_NAMES):
-        spec.joint(jn).armature = ARMATURE[i]
+        spec.joint(jn).armature = 0.0
         a = spec.actuators[name_to_idx[jn.removesuffix("_joint")]]
-        a.dyntype = mujoco.mjtDyn.mjDYN_NONE
-        a.gaintype = mujoco.mjtGain.mjGAIN_FIXED
-        a.biastype = mujoco.mjtBias.mjBIAS_AFFINE
-        # IMPORTANT: do NOT clamp ctrl to joint range.  IsaacGym's
-        # `_compute_torques` uses the *unclamped* target setpoint (which
-        # can be far outside the joint limit when the policy outputs
-        # large actions), produces a large nominal torque, and then clips
-        # the torque to the effort limit.  Setting ctrllimited=True here
-        # would cause MuJoCo to clamp ctrl to joint range first, giving a
-        # much smaller torque that doesn't match training.  Instead leave
-        # ctrl unclamped and rely on forcelimited+forcerange below to
-        # saturate the torque.  Empirically the trained Lite3 handstand
-        # policy outputs raw action magnitudes up to ~110 in steady state,
-        # so this divergence matters a lot.
-        a.inheritrange = 0.0
-        a.ctrllimited = False
-        a.gainprm[0] = KP[i]
-        a.biasprm[1] = -KP[i]
-        a.biasprm[2] = -KV[i]
-        a.forcelimited = True
-        a.forcerange[:] = [-EFFORT_LIMITS[i], EFFORT_LIMITS[i]]
+        a.ctrllimited = True
+        a.ctrlrange[:] = [-EFFORT_LIMITS[i], EFFORT_LIMITS[i]]
 
     return spec.compile()
 
@@ -458,8 +459,11 @@ def main():
         _check_finite("action", action, t=data.time, last_action=last_action)
         target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
         _check_finite("target_q", target_q, t=data.time, action=action)
-        data.ctrl[act_ids] = target_q
         for _ in range(DECIMATION):
+            qpos, qvel = joint_state(model, data)
+            tau = KP * (target_q - qpos) + KV * (0.0 - qvel)
+            tau = np.clip(tau, -EFFORT_LIMITS, EFFORT_LIMITS)
+            data.ctrl[act_ids] = tau
             mujoco.mj_step(model, data)
         last_action = action.astype(np.float64)
 
@@ -477,8 +481,11 @@ def main():
             _check_finite("action", action, step=i, t=data.time)
             target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
             _check_finite("target_q", target_q, step=i, action=action)
-            data.ctrl[act_ids] = target_q
             for _ in range(DECIMATION):
+                qpos, qvel = joint_state(model, data)
+                tau = KP * (target_q - qpos) + KV * (0.0 - qvel)
+                tau = np.clip(tau, -EFFORT_LIMITS, EFFORT_LIMITS)
+                data.ctrl[act_ids] = tau
                 mujoco.mj_step(model, data)
             last_action = action.astype(np.float64)
             quat = data.qpos[3:7]
@@ -520,8 +527,11 @@ def main():
             target_q = action * ACTION_SCALE + DEFAULT_JOINT_POS
             print(f"  raw action (policy out, no scale)      : {action}")
             print(f"  target_q   = action*scale + default    : {target_q}")
-            data.ctrl[act_ids] = target_q
             for _ in range(DECIMATION):
+                qpos, qvel = joint_state(model, data)
+                tau = KP * (target_q - qpos) + KV * (0.0 - qvel)
+                tau = np.clip(tau, -EFFORT_LIMITS, EFFORT_LIMITS)
+                data.ctrl[act_ids] = tau
                 mujoco.mj_step(model, data)
             last_action = action.astype(np.float64)
         print(f"\n=== TRACE done.  Final base_z={data.qpos[2]:.4f}m ===")
