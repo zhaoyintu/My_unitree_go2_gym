@@ -106,7 +106,11 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('"std": math.sqrt(0.25)', function_source)
         self.assertIn('"stance_sensor_name": "feet_ground_contact"', function_source)
         self.assertIn('"stance_foot_indices": (0, 1)', function_source)
-        self.assertIn('"body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES', function_source)
+        self.assertIn("ROBOTLAB_BODY_CLEARANCE_SENSOR_NAMES", _source(ENV_CFG))
+        self.assertIn(
+            '"body_clearance_sensor_names": ROBOTLAB_BODY_CLEARANCE_SENSOR_NAMES',
+            function_source,
+        )
         self.assertIn('rewards["handstand_feet_on_air"].weight = 5.0', function_source)
         self.assertIn('rewards["contact"].func = go2_mdp.handstand_stance_contact_mean', function_source)
         self.assertIn('rewards["contact"].weight = 2.0', function_source)
@@ -115,7 +119,7 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('rewards["feet_air_time"].weight = 0.0', function_source)
         self.assertIn('rewards["feet_clearance"].weight = 0.0', function_source)
 
-    def test_robotlab_task_terminates_on_any_non_foot_ground_contact(self) -> None:
+    def test_robotlab_task_terminates_on_trunk_and_thigh_but_not_shank(self) -> None:
         function_source = _top_level_source(
             ENV_CFG,
             "unitree_lite3_handstand_rldeploy_robotlab_env_cfg",
@@ -125,8 +129,12 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('"sensor_name": "trunk_ground_touch"', function_source)
         self.assertIn('cfg.terminations["thigh_contact"] = TerminationTermCfg(', function_source)
         self.assertIn('"sensor_name": "thigh_ground_touch"', function_source)
-        self.assertIn('cfg.terminations["calf_contact"] = TerminationTermCfg(', function_source)
-        self.assertIn('"sensor_name": "calf_ground_touch"', function_source)
+        self.assertIn(
+            "# Lite3 shank collision can touch the ground with the nominal foot contact.",
+            function_source,
+        )
+        self.assertNotIn('cfg.terminations["calf_contact"] = TerminationTermCfg(', function_source)
+        self.assertNotIn('"sensor_name": "calf_ground_touch"', function_source)
 
     def test_robotlab_task_keeps_mass_com_and_adds_sim_to_real_dr(self) -> None:
         function_source = _top_level_source(

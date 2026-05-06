@@ -44,6 +44,10 @@ BODY_CLEARANCE_SENSOR_NAMES = (
     "thigh_ground_touch",
     "calf_ground_touch",
 )
+ROBOTLAB_BODY_CLEARANCE_SENSOR_NAMES = (
+    "trunk_ground_touch",
+    "thigh_ground_touch",
+)
 LITE3_LINK_INERTIA_BODY_NAMES = (
     "FL_THIGH",
     "FL_SHANK",
@@ -308,7 +312,7 @@ def unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play: bool = False) -> Man
     support_params = {
         "sensor_name": "feet_ground_contact",
         "stance_foot_indices": (0, 1),
-        "body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES,
+        "body_clearance_sensor_names": ROBOTLAB_BODY_CLEARANCE_SENSOR_NAMES,
         "target_gravity": (1.0, 0.0, 0.0),
         "orientation_sharpness": 2.0,
         "base_height_target": 0.39,
@@ -335,7 +339,7 @@ def unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play: bool = False) -> Man
         "foot_site_names": ("FL", "FR", "HL", "HR"),
         "stance_sensor_name": "feet_ground_contact",
         "stance_foot_indices": (0, 1),
-        "body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES,
+        "body_clearance_sensor_names": ROBOTLAB_BODY_CLEARANCE_SENSOR_NAMES,
         "support_floor": 0.05,
         "asset_cfg": static_asset_cfg,
     }
@@ -384,10 +388,8 @@ def unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play: bool = False) -> Man
         func=go2_mdp.base_contact,
         params={"sensor_name": "thigh_ground_touch"},
     )
-    cfg.terminations["calf_contact"] = TerminationTermCfg(
-        func=go2_mdp.base_contact,
-        params={"sensor_name": "calf_ground_touch"},
-    )
+    # Lite3 shank collision can touch the ground with the nominal foot contact.
+    # Keep it as a reward penalty, but do not use it as a hard termination.
 
     if play:
         cfg.curriculum = {}
