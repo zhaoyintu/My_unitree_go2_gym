@@ -101,6 +101,22 @@ class Actor(nn.Module):
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
         sd = ckpt["actor_state_dict"]
         mlp_sd = {k[len("mlp."):]: v for k, v in sd.items() if k.startswith("mlp.")}
+        if "0.weight" in mlp_sd:
+            checkpoint_obs_dim = int(mlp_sd["0.weight"].shape[-1])
+            expected_obs_dim = int(self.mlp[0].in_features)
+            if checkpoint_obs_dim != expected_obs_dim:
+                hint = ""
+                if checkpoint_obs_dim == 450:
+                    hint = (
+                        " This checkpoint matches the 450-dim "
+                        "Mjlab-Lite3-Handstand actor; use "
+                        "deploy_mujoco_viewer/deploy_mjlab_lite3_handstand.py."
+                    )
+                raise RuntimeError(
+                    f"Checkpoint actor obs dim {checkpoint_obs_dim} does not match "
+                    f"this Go2 deploy script's {expected_obs_dim}-dim actor for "
+                    f"Mjlab-Go2-Handstand.{hint}"
+                )
         self.mlp.load_state_dict(mlp_sd)
         self.mean.copy_(sd["obs_normalizer._mean"])
         self.std.copy_(sd["obs_normalizer._std"])

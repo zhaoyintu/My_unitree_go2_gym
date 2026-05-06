@@ -26,6 +26,7 @@ Example:
 """
 import argparse
 import time
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -102,7 +103,8 @@ ACTION_SCALE = np.array([
 #   (q - q_default) * 1.0 [12:24]
 #   dq * 0.05             [24:36]
 #   last_action           [36:48]
-NUM_OBS = 48          # frame_stack=1 in our IsaacGym cfg
+NUM_SINGLE_OBS = 48
+NUM_OBS = NUM_SINGLE_OBS          # old checkpoints use frame_stack=1
 # Observation scales — must match `Lite3Cfg_Leggedstand.normalization.obs_scales`.
 OBS_SCALE_LIN_VEL = 2.0     # used for the lin_vel cmd channels
 OBS_SCALE_ANG_VEL = 0.25
@@ -142,13 +144,23 @@ class Actor(nn.Module):
     def __init__(self, num_obs=NUM_OBS, num_actions=12,
                  hidden_dims=(512, 256, 128)):
         super().__init__()
+        self.num_obs = num_obs
+        self.num_actions = num_actions
+        self.hidden_dims = tuple(hidden_dims)
+        self.actor = self._build_actor(num_obs)
+
+    def _build_actor(self, num_obs: int) -> nn.Sequential:
         layers = []
         in_dim = num_obs
-        for h in hidden_dims:
+        for h in self.hidden_dims:
             layers += [nn.Linear(in_dim, h), nn.ELU()]
             in_dim = h
-        layers.append(nn.Linear(in_dim, num_actions))
-        self.actor = nn.Sequential(*layers)
+        layers.append(nn.Linear(in_dim, self.num_actions))
+        return nn.Sequential(*layers)
+
+    @property
+    def frame_stack(self) -> int:
+        return self.num_obs // NUM_SINGLE_OBS
 
     def load(self, path: str):
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
@@ -164,6 +176,18 @@ class Actor(nn.Module):
                     if k.startswith("actor.")}
         if not actor_sd:
             raise KeyError("no `actor.*` keys in model_state_dict")
+        checkpoint_obs_dim = int(actor_sd["0.weight"].shape[-1])
+        if checkpoint_obs_dim % NUM_SINGLE_OBS != 0:
+            hint = ""
+            if checkpoint_obs_dim == 450:
+                hint = " This looks like an mjlab Lite3 checkpoint; use deploy_mjlab_lite3_handstand.py instead."
+            raise RuntimeError(
+                f"checkpoint actor obs dim {checkpoint_obs_dim} is not a multiple "
+                f"of the IsaacGym Lite3 single-frame obs dim {NUM_SINGLE_OBS}.{hint}"
+            )
+        if checkpoint_obs_dim != self.num_obs:
+            self.num_obs = checkpoint_obs_dim
+            self.actor = self._build_actor(self.num_obs)
         self.actor.load_state_dict(actor_sd)
         self.eval()
 
@@ -171,6 +195,24 @@ class Actor(nn.Module):
     def act(self, obs_np: np.ndarray) -> np.ndarray:
         x = torch.from_numpy(obs_np).float().unsqueeze(0)
         return self.actor(x).squeeze(0).numpy()
+
+
+class ObservationStack:
+    """Zero-prefilled frame stack matching IsaacGym frame-stack training."""
+
+    def __init__(self, frame_stack: int):
+        self.frame_stack = frame_stack
+        self.history = deque(maxlen=frame_stack)
+        for _ in range(frame_stack - 1):
+            self.history.append(np.zeros(NUM_SINGLE_OBS, dtype=np.float32))
+
+    def build(self, single_obs: np.ndarray) -> np.ndarray:
+        if single_obs.shape != (NUM_SINGLE_OBS,):
+            raise ValueError(
+                f"single_obs shape {single_obs.shape} != ({NUM_SINGLE_OBS},)"
+            )
+        self.history.append(single_obs.astype(np.float32, copy=True))
+        return np.concatenate(list(self.history), axis=0)
 
 
 def _check_finite(name: str, arr: np.ndarray, **context) -> None:
@@ -395,6 +437,7 @@ def main():
     actor = Actor()
     actor.load(args.policy)
     print(f"[deploy] loaded policy: {args.policy}")
+    print(f"[deploy] actor_obs_dim = {actor.num_obs}, frame_stack = {actor.frame_stack}")
     print(f"[deploy] cmd = {args.cmd}, dt = {CTRL_DT * 1000:.1f} ms")
 
     model = build_model()
@@ -412,10 +455,9 @@ def main():
 
     cmd = np.asarray(args.cmd, dtype=np.float64)
     last_action = np.zeros(12, dtype=np.float64)
+    obs_stack = ObservationStack(frame_stack=actor.frame_stack)
 
-    # IsaacGym Lite3 has frame_stack=1 — no observation history kept.
-
-    def build_obs() -> np.ndarray:
+    def build_single_obs() -> np.ndarray:
         """48-dim observation matching `Go2_legstand.compute_observations`.
 
         IsaacGym applies fixed obs_scales inside the env; here we pre-scale
@@ -443,7 +485,12 @@ def main():
             (qvel * OBS_SCALE_DOF_VEL).astype(np.float32),          # 12
             last_action.astype(np.float32),                         # 12
         ], axis=0)
-        assert obs.shape == (NUM_OBS,), f"obs shape {obs.shape} != ({NUM_OBS},)"
+        assert obs.shape == (NUM_SINGLE_OBS,), f"obs shape {obs.shape} != ({NUM_SINGLE_OBS},)"
+        return obs
+
+    def build_obs() -> np.ndarray:
+        obs = obs_stack.build(build_single_obs())
+        assert obs.shape == (actor.num_obs,), f"obs shape {obs.shape} != ({actor.num_obs},)"
         return obs
 
     n_steps = int(args.duration / CTRL_DT)
@@ -501,25 +548,27 @@ def main():
         np.set_printoptions(precision=4, suppress=True, linewidth=160)
         print(f"\n=== TRACE first {args.trace} control steps ===")
         print(f"SIM_DT={SIM_DT}  DECIMATION={DECIMATION}  CTRL_DT={CTRL_DT}")
+        print(f"actor_obs_dim={actor.num_obs}  frame_stack={actor.frame_stack}")
         print(f"KP={KP[0]}  KV={KV[0]}  ACTION_SCALE[0:3]={ACTION_SCALE[:3]}")
         print(f"DEFAULT_JOINT_POS={DEFAULT_JOINT_POS}")
         for i in range(args.trace):
             obs = build_obs()
+            latest_obs = obs[-NUM_SINGLE_OBS:]
             ang_vel = data.sensor("imu_ang_vel").data.copy()
             quat = data.qpos[3:7].copy()
             grav = quat_rotate_inverse(quat, np.array([0.0, 0.0, -1.0]))
             qpos, qvel = joint_state(model, data)
             print(f"\n--- step {i}  t={data.time:.4f}s  base_z={data.qpos[2]:.4f}m"
                   f"  base_quat(wxyz)={quat} ---")
-            print(f"  obs[0:3]   zeros + stand_cmd          : {obs[0:3]}")
-            print(f"  obs[3:6]   ang_vel * 0.25  (raw={ang_vel}) : {obs[3:6]}")
-            print(f"  obs[6:9]   projected_gravity (body)   : {obs[6:9]}")
-            print(f"  obs[9:12]  scaled_cmd                  : {obs[9:12]}")
+            print(f"  latest_obs[0:3]   zeros + stand_cmd          : {latest_obs[0:3]}")
+            print(f"  latest_obs[3:6]   ang_vel * 0.25  (raw={ang_vel}) : {latest_obs[3:6]}")
+            print(f"  latest_obs[6:9]   projected_gravity (body)   : {latest_obs[6:9]}")
+            print(f"  latest_obs[9:12]  scaled_cmd                  : {latest_obs[9:12]}")
             print(f"  obs[12:24] (q-default)*1.0  raw_q={qpos}")
-            print(f"             scaled                       : {obs[12:24]}")
+            print(f"             scaled                       : {latest_obs[12:24]}")
             print(f"  obs[24:36] dq*0.05  raw_dq={qvel}")
-            print(f"             scaled                       : {obs[24:36]}")
-            print(f"  obs[36:48] last_action                  : {obs[36:48]}")
+            print(f"             scaled                       : {latest_obs[24:36]}")
+            print(f"  latest_obs[36:48] last_action                  : {latest_obs[36:48]}")
             if args.null_policy:
                 action = np.zeros(12)
             else:

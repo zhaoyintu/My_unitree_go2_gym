@@ -17,6 +17,7 @@ from go2_mjlab.robots.lite3_constants import get_lite3_rldeploy_handstand_robot_
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
 
@@ -66,6 +67,7 @@ def unitree_lite3_handstand_rldeploy_env_cfg(play: bool = False) -> ManagerBased
     """Create the Lite3 handstand task aligned with `rl_deploy_handstand`."""
     cfg = unitree_lite3_handstand_env_cfg(play=play)
     cfg.scene.entities["robot"] = get_lite3_rldeploy_handstand_robot_cfg()
+    cfg.commands["twist"].rel_standing_envs = 0.25
 
     actor_terms = _rldeploy_actor_terms()
     critic_terms = {
@@ -84,6 +86,67 @@ def unitree_lite3_handstand_rldeploy_env_cfg(play: bool = False) -> ManagerBased
         cfg.events["foot_friction_slide"].params["ranges"] = (0.8, 1.2)
     cfg.events.pop("foot_friction_spin", None)
     cfg.events.pop("foot_friction_roll", None)
+
+    rewards = cfg.rewards
+    static_asset_cfg = SceneEntityCfg("robot", body_names=("TORSO",))
+    soft_quality_params = {
+        "target_gravity": (1.0, 0.0, 0.0),
+        "orientation_sharpness": 2.0,
+        "base_height_target": 0.39,
+        "rear_foot_target_height": 0.56,
+        "rear_foot_lift_min": 0.08,
+        "rear_foot_indices": (2, 3),
+        "foot_site_names": ("FL", "FR", "HL", "HR"),
+        "sensor_name": "feet_ground_contact",
+        "asset_cfg": static_asset_cfg,
+    }
+
+    # Static-first reward recipe: make the front-paw handstand pose pay before
+    # command tracking can dominate.  The failed RLDeploy run earned high
+    # tracking reward while prone because the old handstand gate was always open.
+    rewards["handstand_orientation"].func = go2_mdp.handstand_orientation_exp
+    rewards["handstand_orientation"].weight = 2.0
+    rewards["handstand_orientation"].params = {
+        "target_gravity": (1.0, 0.0, 0.0),
+        "sharpness": 2.0,
+    }
+    rewards["handstand_feet_on_air"].weight = 1.0
+    rewards["handstand_feet_height_exp"].func = go2_mdp.handstand_rear_feet_height_static
+    rewards["handstand_feet_height_exp"].weight = 8.0
+    rewards["handstand_feet_height_exp"].params = {
+        "target_height": 0.56,
+        "foot_indices": (2, 3),
+        "foot_site_names": ("FL", "FR", "HL", "HR"),
+        "rear_foot_lift_min": 0.08,
+        "rear_foot_height_sharpness": 4.0,
+        "asset_cfg": static_asset_cfg,
+    }
+    rewards["base_height"].func = go2_mdp.handstand_base_height_soft
+    rewards["base_height"].weight = 0.8
+    rewards["base_height"].params = {
+        "target_height": 0.39,
+        "target_gravity": (1.0, 0.0, 0.0),
+        "orientation_sharpness": 2.0,
+        "asset_cfg": static_asset_cfg,
+    }
+    rewards["tracking_lin_vel"].func = go2_mdp.handstand_tracking_lin_vel_soft_gate
+    rewards["tracking_lin_vel"].params = {"command_name": "twist", **soft_quality_params}
+    rewards["tracking_ang_vel"].func = go2_mdp.handstand_tracking_ang_vel_soft_gate
+    rewards["tracking_ang_vel"].params = {"command_name": "twist", **soft_quality_params}
+    rewards["tracking_lin_vel_zero"].func = go2_mdp.handstand_tracking_lin_vel_zero_soft_gate
+    rewards["tracking_lin_vel_zero"].params = {"command_name": "twist", **soft_quality_params}
+    rewards["tracking_ang_vel_zero"].func = go2_mdp.handstand_tracking_ang_vel_zero_soft_gate
+    rewards["tracking_ang_vel_zero"].params = {"command_name": "twist", **soft_quality_params}
+    rewards["contact"].func = go2_mdp.handstand_stance_contact_mean
+    rewards["contact"].weight = 0.8
+    rewards["contact"].params = {
+        "sensor_name": "feet_ground_contact",
+        "foot_indices": (0, 1),
+    }
+    rewards["feet_air_time"].weight = 0.0
+    rewards["feet_clearance"].weight = 0.0
+    rewards["default_pos"].weight = -0.6
+    rewards["default_pos_reward"].weight = 2.0
 
     cfg.observations = {
         "actor": ObservationGroupCfg(

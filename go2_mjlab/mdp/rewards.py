@@ -374,6 +374,163 @@ def handstand_feet_height(
     return torch.exp(-error * 10)
 
 
+def _handstand_orientation_quality(
+    env: ManagerBasedRlEnv,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    sharpness: float = 2.0,
+) -> torch.Tensor:
+    target = torch.tensor(target_gravity, device=env.device, dtype=torch.float32)
+    asset: Entity = env.scene["robot"]
+    error = torch.square(asset.data.projected_gravity_b - target).sum(dim=1)
+    return torch.exp(-error * sharpness)
+
+
+def _handstand_base_height_quality(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    asset: Entity = env.scene[asset_cfg.name]
+    base_z = asset.data.root_link_pos_w[:, 2]
+    return torch.exp(-torch.abs(base_z - target_height) * 5)
+
+
+def _handstand_foot_heights(
+    env: ManagerBasedRlEnv,
+    foot_indices: tuple[int, ...],
+    foot_site_names: tuple[str, ...],
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    asset: Entity = env.scene[asset_cfg.name]
+    site_ids, _ = asset.find_sites(foot_site_names)
+    feet_z = asset.data.site_pos_w[:, site_ids, 2]
+    return feet_z[:, list(foot_indices)]
+
+
+def _handstand_rear_foot_lift_quality(
+    env: ManagerBasedRlEnv,
+    target_height: float = 0.56,
+    rear_foot_lift_min: float = 0.08,
+    foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    selected = _handstand_foot_heights(env, foot_indices, foot_site_names, asset_cfg)
+    rear_height = torch.mean(selected, dim=1)
+    lift_range = max(target_height - rear_foot_lift_min, 1e-6)
+    return torch.clamp((rear_height - rear_foot_lift_min) / lift_range, min=0.0, max=1.0)
+
+
+def _handstand_rear_air_quality(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...] = (2, 3),
+) -> torch.Tensor:
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0
+    selected = contact[:, list(foot_indices)]
+    return (~selected).float().mean(dim=1)
+
+
+def _handstand_soft_quality(
+    env: ManagerBasedRlEnv,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    orientation_sharpness: float = 2.0,
+    base_height_target: float = 0.39,
+    rear_foot_target_height: float = 0.56,
+    rear_foot_lift_min: float = 0.08,
+    rear_foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    sensor_name: str | None = None,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Soft per-env handstand gate for RLDeploy reward terms.
+
+    This keeps command tracking dense near the correct pose but prevents a
+    prone/sliding policy from collecting full tracking reward before it has
+    learned the front-paw handstand geometry.
+    """
+    orientation_quality = _handstand_orientation_quality(
+        env, target_gravity=target_gravity, sharpness=orientation_sharpness
+    )
+    lift_quality = _handstand_rear_foot_lift_quality(
+        env,
+        target_height=rear_foot_target_height,
+        rear_foot_lift_min=rear_foot_lift_min,
+        foot_indices=rear_foot_indices,
+        foot_site_names=foot_site_names,
+        asset_cfg=asset_cfg,
+    )
+    base_height_quality = _handstand_base_height_quality(
+        env, target_height=base_height_target, asset_cfg=asset_cfg
+    )
+    pose_quality = torch.clamp(
+        0.45 * orientation_quality + 0.35 * lift_quality + 0.20 * base_height_quality,
+        min=0.0,
+        max=1.0,
+    )
+    if sensor_name is not None:
+        rear_air_quality = _handstand_rear_air_quality(
+            env, sensor_name=sensor_name, foot_indices=rear_foot_indices
+        )
+        pose_quality = pose_quality * (0.20 + 0.80 * rear_air_quality)
+    return pose_quality
+
+
+def handstand_orientation_exp(
+    env: ManagerBasedRlEnv,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    sharpness: float = 2.0,
+) -> torch.Tensor:
+    """Positive handstand orientation reward with a smooth gradient."""
+    return _handstand_orientation_quality(env, target_gravity=target_gravity, sharpness=sharpness)
+
+
+def handstand_base_height_soft(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    orientation_sharpness: float = 2.0,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Base-height reward that is strongest near handstand orientation."""
+    height_quality = _handstand_base_height_quality(env, target_height=target_height, asset_cfg=asset_cfg)
+    orientation_quality = _handstand_orientation_quality(
+        env, target_gravity=target_gravity, sharpness=orientation_sharpness
+    )
+    return height_quality * (0.25 + 0.75 * orientation_quality)
+
+
+def handstand_rear_feet_height_static(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    rear_foot_lift_min: float = 0.08,
+    rear_foot_height_sharpness: float = 4.0,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Rear-foot height reward with lift progress before the exact target.
+
+    The old `exp(-error * 10)` term is nearly zero while the rear feet are
+    still low, which leaves very little gradient for escaping the prone local
+    optimum.  This mirrors the IsaacGym static-first Lite3 recipe.
+    """
+    rear_heights = _handstand_foot_heights(env, foot_indices, foot_site_names, asset_cfg)
+    height_error = torch.mean(torch.abs(rear_heights - target_height), dim=1)
+    target_quality = torch.exp(-height_error * rear_foot_height_sharpness)
+    lift_quality = _handstand_rear_foot_lift_quality(
+        env,
+        target_height=target_height,
+        rear_foot_lift_min=rear_foot_lift_min,
+        foot_indices=foot_indices,
+        foot_site_names=foot_site_names,
+        asset_cfg=asset_cfg,
+    )
+    symmetry_quality = torch.exp(-torch.abs(rear_heights[:, 0] - rear_heights[:, 1]) * 5.0)
+    return 0.35 * target_quality + 0.55 * lift_quality + 0.10 * symmetry_quality * lift_quality
+
+
 def ang_xz_penalty(
     env: ManagerBasedRlEnv,
     target_height: float = 0.08,
@@ -676,9 +833,161 @@ def handstand_tracking_ang_vel_zero(
     return ang_vel_error * (quality > 0.70).float() * cmd_near_zero
 
 
+def handstand_tracking_lin_vel_soft_gate(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    orientation_sharpness: float = 2.0,
+    base_height_target: float = 0.39,
+    rear_foot_target_height: float = 0.56,
+    rear_foot_lift_min: float = 0.08,
+    rear_foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    sensor_name: str | None = None,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Linear velocity tracking multiplied by soft handstand quality."""
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    lin_vel_b = asset.data.root_link_lin_vel_b
+    x_error = torch.square(command[:, 0] - lin_vel_b[:, 2])
+    y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
+    quality = _handstand_soft_quality(
+        env,
+        target_gravity=target_gravity,
+        orientation_sharpness=orientation_sharpness,
+        base_height_target=base_height_target,
+        rear_foot_target_height=rear_foot_target_height,
+        rear_foot_lift_min=rear_foot_lift_min,
+        rear_foot_indices=rear_foot_indices,
+        foot_site_names=foot_site_names,
+        sensor_name=sensor_name,
+        asset_cfg=asset_cfg,
+    )
+    return torch.exp(-(x_error + y_error) / tracking_sigma) * quality
+
+
+def handstand_tracking_ang_vel_soft_gate(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    tracking_sigma: float = _HANDSTAND_TRACKING_SIGMA,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    orientation_sharpness: float = 2.0,
+    base_height_target: float = 0.39,
+    rear_foot_target_height: float = 0.56,
+    rear_foot_lift_min: float = 0.08,
+    rear_foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    sensor_name: str | None = None,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Yaw tracking multiplied by soft handstand quality."""
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    ang_vel_b = asset.data.root_link_ang_vel_b
+    ang_vel_error = torch.square(command[:, 2] + ang_vel_b[:, 0])
+    quality = _handstand_soft_quality(
+        env,
+        target_gravity=target_gravity,
+        orientation_sharpness=orientation_sharpness,
+        base_height_target=base_height_target,
+        rear_foot_target_height=rear_foot_target_height,
+        rear_foot_lift_min=rear_foot_lift_min,
+        rear_foot_indices=rear_foot_indices,
+        foot_site_names=foot_site_names,
+        sensor_name=sensor_name,
+        asset_cfg=asset_cfg,
+    )
+    return torch.exp(-ang_vel_error / tracking_sigma) * quality
+
+
+def handstand_tracking_lin_vel_zero_soft_gate(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    orientation_sharpness: float = 2.0,
+    base_height_target: float = 0.39,
+    rear_foot_target_height: float = 0.56,
+    rear_foot_lift_min: float = 0.08,
+    rear_foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    sensor_name: str | None = None,
+    moving_threshold: float = 0.1,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Zero-command linear velocity penalty behind the same soft gate."""
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    lin_vel_b = asset.data.root_link_lin_vel_b
+    x_error = torch.square(command[:, 0] - lin_vel_b[:, 2])
+    y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
+    quality = _handstand_soft_quality(
+        env,
+        target_gravity=target_gravity,
+        orientation_sharpness=orientation_sharpness,
+        base_height_target=base_height_target,
+        rear_foot_target_height=rear_foot_target_height,
+        rear_foot_lift_min=rear_foot_lift_min,
+        rear_foot_indices=rear_foot_indices,
+        foot_site_names=foot_site_names,
+        sensor_name=sensor_name,
+        asset_cfg=asset_cfg,
+    )
+    cmd_near_zero = (torch.norm(command[:, :2], dim=1) < moving_threshold).float()
+    return (x_error + y_error) * quality * cmd_near_zero
+
+
+def handstand_tracking_ang_vel_zero_soft_gate(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    target_gravity: tuple[float, float, float] = (1.0, 0.0, 0.0),
+    orientation_sharpness: float = 2.0,
+    base_height_target: float = 0.39,
+    rear_foot_target_height: float = 0.56,
+    rear_foot_lift_min: float = 0.08,
+    rear_foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    sensor_name: str | None = None,
+    moving_threshold: float = 0.1,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Zero-command yaw penalty behind the same soft gate."""
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    ang_vel_b = asset.data.root_link_ang_vel_b
+    ang_vel_error = torch.square(command[:, 2] + ang_vel_b[:, 0])
+    quality = _handstand_soft_quality(
+        env,
+        target_gravity=target_gravity,
+        orientation_sharpness=orientation_sharpness,
+        base_height_target=base_height_target,
+        rear_foot_target_height=rear_foot_target_height,
+        rear_foot_lift_min=rear_foot_lift_min,
+        rear_foot_indices=rear_foot_indices,
+        foot_site_names=foot_site_names,
+        sensor_name=sensor_name,
+        asset_cfg=asset_cfg,
+    )
+    cmd_near_zero = (torch.abs(command[:, 2]) < moving_threshold).float()
+    return ang_vel_error * quality * cmd_near_zero
+
+
 # ---------------------------------------------------------------------------
 # Handstand shaping rewards
 # ---------------------------------------------------------------------------
+
+
+def handstand_stance_contact_mean(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...],
+) -> torch.Tensor:
+    """Reward indexed stance feet staying in ground contact."""
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0
+    selected = contact[:, list(foot_indices)]
+    return selected.float().mean(dim=1)
 
 
 def handstand_contact(

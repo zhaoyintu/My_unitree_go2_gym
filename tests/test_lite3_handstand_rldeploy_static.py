@@ -10,6 +10,7 @@ INIT = REPO_ROOT / "go2_mjlab/__init__.py"
 ENV_CFG = REPO_ROOT / "go2_mjlab/config/lite3_handstand_rldeploy/env_cfgs.py"
 RL_CFG = REPO_ROOT / "go2_mjlab/config/lite3_handstand_rldeploy/rl_cfg.py"
 LITE3_CONSTANTS = REPO_ROOT / "go2_mjlab/robots/lite3_constants.py"
+REWARDS = REPO_ROOT / "go2_mjlab/mdp/rewards.py"
 
 
 def _source(path: Path) -> str:
@@ -102,6 +103,39 @@ class Lite3HandstandRLDeployStaticTest(unittest.TestCase):
         self.assertIn('"robot/imu_lin_vel"', critic_source)
         self.assertIn('"foot_contact"', critic_source)
         self.assertIn("go2_mdp.foot_contact", critic_source)
+
+    def test_reward_recipe_prioritizes_handstand_before_tracking(self) -> None:
+        function_source = _top_level_source(ENV_CFG, "unitree_lite3_handstand_rldeploy_env_cfg")
+
+        self.assertIn('cfg.commands["twist"].rel_standing_envs = 0.25', function_source)
+        self.assertIn('rewards["handstand_orientation"].func = go2_mdp.handstand_orientation_exp', function_source)
+        self.assertIn('rewards["handstand_orientation"].weight = 2.0', function_source)
+        self.assertIn('rewards["handstand_feet_on_air"].weight = 1.0', function_source)
+        self.assertIn('rewards["handstand_feet_height_exp"].func = go2_mdp.handstand_rear_feet_height_static', function_source)
+        self.assertIn('rewards["handstand_feet_height_exp"].weight = 8.0', function_source)
+        self.assertIn('rewards["base_height"].func = go2_mdp.handstand_base_height_soft', function_source)
+        self.assertIn('rewards["base_height"].weight = 0.8', function_source)
+        self.assertIn('rewards["tracking_lin_vel"].func = go2_mdp.handstand_tracking_lin_vel_soft_gate', function_source)
+        self.assertIn('rewards["tracking_ang_vel"].func = go2_mdp.handstand_tracking_ang_vel_soft_gate', function_source)
+        self.assertIn('rewards["contact"].func = go2_mdp.handstand_stance_contact_mean', function_source)
+        self.assertIn('rewards["contact"].weight = 0.8', function_source)
+        self.assertIn('rewards["feet_air_time"].weight = 0.0', function_source)
+        self.assertIn('rewards["feet_clearance"].weight = 0.0', function_source)
+        self.assertIn('rewards["default_pos"].weight = -0.6', function_source)
+        self.assertIn('rewards["default_pos_reward"].weight = 2.0', function_source)
+
+    def test_soft_gated_tracking_does_not_use_always_open_quality_gate(self) -> None:
+        source = _source(REWARDS)
+
+        self.assertIn("def _handstand_soft_quality", source)
+        for name in (
+            "handstand_tracking_lin_vel_soft_gate",
+            "handstand_tracking_ang_vel_soft_gate",
+        ):
+            function_source = _top_level_source(REWARDS, name)
+            self.assertIn("_handstand_soft_quality(", function_source)
+            self.assertNotIn("_handstand_quality(", function_source)
+            self.assertNotIn("(quality > 0.70).float()", function_source)
 
     def test_runner_uses_separate_experiment_name(self) -> None:
         source = _source(RL_CFG)
