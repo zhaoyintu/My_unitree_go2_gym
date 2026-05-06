@@ -9,3 +9,9 @@ def unitree_lite3_handstand_rldeploy_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     cfg = unitree_lite3_handstand_ppo_runner_cfg()
     cfg.experiment_name = "lite3_handstand_rldeploy"
     return cfg
+
+
+def unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+    cfg = unitree_lite3_handstand_rldeploy_ppo_runner_cfg()
+    cfg.experiment_name = "lite3_handstand_rldeploy_dr"
+    return cfg

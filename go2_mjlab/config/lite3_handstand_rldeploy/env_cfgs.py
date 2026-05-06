@@ -11,11 +11,14 @@ The actor therefore sees 45 values per frame and uses Mjlab's term-major
 base linear velocity and contact state as privileged training-only inputs.
 """
 
+import math
+
 from go2_mjlab import mdp as go2_mdp
 from go2_mjlab.config.lite3_handstand.env_cfgs import unitree_lite3_handstand_env_cfg
 from go2_mjlab.robots.lite3_constants import get_lite3_rldeploy_handstand_robot_cfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
+from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
@@ -33,6 +36,17 @@ RLDEPLOY_ACTOR_TERM_ORDER = (
 RLDEPLOY_SINGLE_OBS_DIM = 45
 RLDEPLOY_HISTORY_LENGTH = 10
 RLDEPLOY_ACTOR_OBS_DIM = RLDEPLOY_SINGLE_OBS_DIM * RLDEPLOY_HISTORY_LENGTH
+LITE3_LINK_INERTIA_BODY_NAMES = (
+    "FL_THIGH",
+    "FL_SHANK",
+    "FR_THIGH",
+    "FR_SHANK",
+    "HL_THIGH",
+    "HL_SHANK",
+    "HR_THIGH",
+    "HR_SHANK",
+)
+LITE3_LINK_INERTIA_ALPHA_RANGE = (math.log(0.9) / 2.0, math.log(1.1) / 2.0)
 
 
 def _rldeploy_actor_terms() -> dict[str, ObservationTermCfg]:
@@ -165,4 +179,79 @@ def unitree_lite3_handstand_rldeploy_env_cfg(play: bool = False) -> ManagerBased
 
     cfg.sim.mujoco.timestep = 0.001
     cfg.decimation = 20
+    return cfg
+
+
+def _add_rldeploy_sim2real_dr_events(cfg: ManagerBasedRlEnvCfg) -> None:
+    """Add sim-to-real DR events supported by mjlab's stock event API."""
+    actuator_asset_cfg = SceneEntityCfg("robot")
+    joint_asset_cfg = SceneEntityCfg("robot", joint_names=(".*",))
+    link_inertia_asset_cfg = SceneEntityCfg("robot", body_names=LITE3_LINK_INERTIA_BODY_NAMES)
+
+    cfg.events["encoder_bias"].params["bias_range"] = (-0.02, 0.02)
+    cfg.events.update(
+        {
+            "pd_gains": EventTermCfg(
+                mode="startup",
+                func=envs_mdp.dr.pd_gains,
+                params={
+                    "kp_range": (0.9, 1.1),
+                    "kd_range": (0.9, 1.1),
+                    "operation": "scale",
+                    "asset_cfg": actuator_asset_cfg,
+                },
+            ),
+            "motor_strength": EventTermCfg(
+                mode="startup",
+                func=envs_mdp.dr.effort_limits,
+                params={
+                    "effort_limit_range": (0.8, 1.2),
+                    "operation": "scale",
+                    "asset_cfg": actuator_asset_cfg,
+                },
+            ),
+            "joint_friction": EventTermCfg(
+                mode="startup",
+                func=envs_mdp.dr.joint_friction,
+                params={
+                    "ranges": (0.01, 0.2),
+                    "operation": "abs",
+                    "asset_cfg": joint_asset_cfg,
+                },
+            ),
+            "joint_damping": EventTermCfg(
+                mode="startup",
+                func=envs_mdp.dr.joint_damping,
+                params={
+                    "ranges": (0.0, 0.2),
+                    "operation": "abs",
+                    "asset_cfg": joint_asset_cfg,
+                },
+            ),
+            "joint_armature": EventTermCfg(
+                mode="startup",
+                func=envs_mdp.dr.joint_armature,
+                params={
+                    "ranges": (0.005, 0.015),
+                    "operation": "abs",
+                    "asset_cfg": joint_asset_cfg,
+                },
+            ),
+            "link_inertia": EventTermCfg(
+                mode="startup",
+                func=envs_mdp.dr.pseudo_inertia,
+                params={
+                    "alpha_range": LITE3_LINK_INERTIA_ALPHA_RANGE,
+                    "asset_cfg": link_inertia_asset_cfg,
+                },
+            ),
+        }
+    )
+
+
+def unitree_lite3_handstand_rldeploy_dr_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+    """Create the RLDeploy Lite3 handstand task with additional sim-to-real DR."""
+    cfg = unitree_lite3_handstand_rldeploy_env_cfg(play=play)
+    if not play:
+        _add_rldeploy_sim2real_dr_events(cfg)
     return cfg

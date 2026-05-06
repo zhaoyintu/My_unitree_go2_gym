@@ -27,9 +27,11 @@ from go2_mjlab.config.lite3_handstand.rl_cfg import (
     unitree_lite3_handstand_robust_ppo_runner_cfg,
 )
 from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
+    unitree_lite3_handstand_rldeploy_dr_env_cfg,
     unitree_lite3_handstand_rldeploy_env_cfg,
 )
 from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
+    unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_ppo_runner_cfg,
 )
 from mjlab.tasks.registry import register_mjlab_task
@@ -112,4 +114,12 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_rldeploy_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_rldeploy_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_rldeploy_ppo_runner_cfg(),
+)
+
+# RLDeploy contract plus supported sim-to-real domain randomization
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-DR",
+    env_cfg=unitree_lite3_handstand_rldeploy_dr_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_dr_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg(),
 )
