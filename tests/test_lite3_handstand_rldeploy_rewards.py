@@ -109,6 +109,10 @@ class _FakeEnv:
         base_z: float,
         rear_foot_z: tuple[float, float],
         rear_contact: tuple[bool, bool],
+        front_contact: tuple[bool, bool] = (False, False),
+        trunk_contact: bool = False,
+        thigh_contact: bool = False,
+        calf_contact: bool = False,
         command: tuple[float, float, float] = (0.0, 0.0, 0.0),
     ) -> None:
         robot = _FakeRobot(
@@ -117,11 +121,26 @@ class _FakeEnv:
             rear_foot_z=rear_foot_z,
         )
         contact = torch.tensor(
-            [[False, False, rear_contact[0], rear_contact[1]]],
+            [[front_contact[0], front_contact[1], rear_contact[0], rear_contact[1]]],
             dtype=torch.bool,
         )
-        sensor = types.SimpleNamespace(data=types.SimpleNamespace(found=contact))
-        self.scene = {"robot": robot, "feet_ground_contact": sensor}
+        foot_sensor = types.SimpleNamespace(data=types.SimpleNamespace(found=contact))
+        trunk_sensor = types.SimpleNamespace(
+            data=types.SimpleNamespace(found=torch.tensor([[trunk_contact]], dtype=torch.bool))
+        )
+        thigh_sensor = types.SimpleNamespace(
+            data=types.SimpleNamespace(found=torch.tensor([[thigh_contact] * 4], dtype=torch.bool))
+        )
+        calf_sensor = types.SimpleNamespace(
+            data=types.SimpleNamespace(found=torch.tensor([[calf_contact] * 4], dtype=torch.bool))
+        )
+        self.scene = {
+            "robot": robot,
+            "feet_ground_contact": foot_sensor,
+            "trunk_ground_touch": trunk_sensor,
+            "thigh_ground_touch": thigh_sensor,
+            "calf_ground_touch": calf_sensor,
+        }
         self.command_manager = types.SimpleNamespace(
             get_command=lambda _name: torch.tensor([command], dtype=torch.float32)
         )
@@ -184,6 +203,74 @@ class Lite3HandstandRLDeployRewardTest(unittest.TestCase):
 
         self.assertLess(float(low_reward.item()), float(half_lift_reward.item()))
         self.assertLess(float(half_lift_reward.item()), float(target_reward.item()))
+
+    def test_supported_gate_suppresses_head_and_thigh_scrape_local_optimum(self) -> None:
+        scrape_env = _FakeEnv(
+            projected_gravity=(1.0, 0.0, 0.0),
+            base_z=0.33,
+            rear_foot_z=(0.56, 0.56),
+            front_contact=(False, False),
+            rear_contact=(False, False),
+            trunk_contact=True,
+            thigh_contact=True,
+            calf_contact=True,
+        )
+        clean_env = _FakeEnv(
+            projected_gravity=(1.0, 0.0, 0.0),
+            base_z=0.39,
+            rear_foot_z=(0.56, 0.56),
+            front_contact=(True, True),
+            rear_contact=(False, False),
+            trunk_contact=False,
+            thigh_contact=False,
+            calf_contact=False,
+        )
+        support_params = {
+            "sensor_name": "feet_ground_contact",
+            "stance_foot_indices": (0, 1),
+            "body_clearance_sensor_names": (
+                "trunk_ground_touch",
+                "thigh_ground_touch",
+                "calf_ground_touch",
+            ),
+        }
+
+        scrape_tracking = rewards.handstand_tracking_lin_vel_soft_gate(
+            scrape_env,
+            command_name="twist",
+            **support_params,
+        )
+        clean_tracking = rewards.handstand_tracking_lin_vel_soft_gate(
+            clean_env,
+            command_name="twist",
+            **support_params,
+        )
+        scrape_height = rewards.handstand_rear_feet_height_static(
+            scrape_env,
+            target_height=0.56,
+            stance_sensor_name="feet_ground_contact",
+            stance_foot_indices=(0, 1),
+            body_clearance_sensor_names=(
+                "trunk_ground_touch",
+                "thigh_ground_touch",
+                "calf_ground_touch",
+            ),
+        )
+        clean_height = rewards.handstand_rear_feet_height_static(
+            clean_env,
+            target_height=0.56,
+            stance_sensor_name="feet_ground_contact",
+            stance_foot_indices=(0, 1),
+            body_clearance_sensor_names=(
+                "trunk_ground_touch",
+                "thigh_ground_touch",
+                "calf_ground_touch",
+            ),
+        )
+
+        self.assertLess(float(scrape_tracking.item()), 0.10)
+        self.assertGreater(float(clean_tracking.item()), 0.95)
+        self.assertLess(float(scrape_height.item()), 0.20 * float(clean_height.item()))
 
 
 if __name__ == "__main__":

@@ -91,6 +91,22 @@ class Lite3HandstandRLDeployDRStaticTest(unittest.TestCase):
             helper_source,
         )
 
+    def test_dr_task_adds_support_gate_reward_recipe(self) -> None:
+        function_source = _top_level_source(
+            ENV_CFG,
+            "unitree_lite3_handstand_rldeploy_dr_env_cfg",
+        )
+        helper_source = _top_level_source(ENV_CFG, "_add_rldeploy_support_gate_rewards")
+
+        self.assertIn("_add_rldeploy_support_gate_rewards(cfg)", function_source)
+        self.assertIn('"stance_sensor_name": "feet_ground_contact"', helper_source)
+        self.assertIn('"stance_foot_indices": (0, 1)', helper_source)
+        self.assertIn('"body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES', helper_source)
+        self.assertIn('rewards["contact"].weight = 2.0', helper_source)
+        self.assertIn('rewards["base_contact"].weight = -6.0', helper_source)
+        self.assertIn('rewards["thigh_collision"].weight = -4.0', helper_source)
+        self.assertIn('rewards["calf_collision"].weight = -4.0', helper_source)
+
     def test_dr_task_keeps_current_gentle_base_push(self) -> None:
         base_source = _top_level_source(BASE_ENV_CFG, "unitree_lite3_handstand_env_cfg")
         helper_source = _top_level_source(ENV_CFG, "_add_rldeploy_sim2real_dr_events")

@@ -36,6 +36,11 @@ RLDEPLOY_ACTOR_TERM_ORDER = (
 RLDEPLOY_SINGLE_OBS_DIM = 45
 RLDEPLOY_HISTORY_LENGTH = 10
 RLDEPLOY_ACTOR_OBS_DIM = RLDEPLOY_SINGLE_OBS_DIM * RLDEPLOY_HISTORY_LENGTH
+BODY_CLEARANCE_SENSOR_NAMES = (
+    "trunk_ground_touch",
+    "thigh_ground_touch",
+    "calf_ground_touch",
+)
 LITE3_LINK_INERTIA_BODY_NAMES = (
     "FL_THIGH",
     "FL_SHANK",
@@ -182,6 +187,33 @@ def unitree_lite3_handstand_rldeploy_env_cfg(play: bool = False) -> ManagerBased
     return cfg
 
 
+def _add_rldeploy_support_gate_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
+    rewards = cfg.rewards
+    support_params = {
+        "stance_foot_indices": (0, 1),
+        "body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES,
+    }
+    for reward_name in (
+        "tracking_lin_vel",
+        "tracking_ang_vel",
+        "tracking_lin_vel_zero",
+        "tracking_ang_vel_zero",
+    ):
+        rewards[reward_name].params.update(support_params)
+
+    rewards["handstand_feet_height_exp"].params.update(
+        {
+            "stance_sensor_name": "feet_ground_contact",
+            "stance_foot_indices": (0, 1),
+            "body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES,
+        }
+    )
+    rewards["contact"].weight = 2.0
+    rewards["base_contact"].weight = -6.0
+    rewards["thigh_collision"].weight = -4.0
+    rewards["calf_collision"].weight = -4.0
+
+
 def _add_rldeploy_sim2real_dr_events(cfg: ManagerBasedRlEnvCfg) -> None:
     """Add sim-to-real DR events supported by mjlab's stock event API."""
     actuator_asset_cfg = SceneEntityCfg("robot")
@@ -252,6 +284,7 @@ def _add_rldeploy_sim2real_dr_events(cfg: ManagerBasedRlEnvCfg) -> None:
 def unitree_lite3_handstand_rldeploy_dr_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     """Create the RLDeploy Lite3 handstand task with additional sim-to-real DR."""
     cfg = unitree_lite3_handstand_rldeploy_env_cfg(play=play)
+    _add_rldeploy_support_gate_rewards(cfg)
     if not play:
         _add_rldeploy_sim2real_dr_events(cfg)
     return cfg
