@@ -602,6 +602,31 @@ def handstand_rear_feet_height_static(
     return height_quality * (support_floor + (1.0 - support_floor) * support_quality)
 
 
+def handstand_feet_height_l2_exp(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    std: float,
+    foot_indices: tuple[int, ...] = (2, 3),
+    foot_site_names: tuple[str, ...] = ("FL", "FR", "HL", "HR"),
+    stance_sensor_name: str | None = None,
+    stance_foot_indices: tuple[int, ...] | None = None,
+    body_clearance_sensor_names: tuple[str, ...] = (),
+    support_floor: float = 0.10,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """RobotLab-style selected-foot height reward with optional support gate."""
+    feet_height = _handstand_foot_heights(env, foot_indices, foot_site_names, asset_cfg)
+    feet_height_error = torch.sum(torch.square(feet_height - target_height), dim=1)
+    height_reward = torch.exp(-feet_height_error / std**2)
+    support_quality = _handstand_support_quality(
+        env,
+        stance_sensor_name=stance_sensor_name,
+        stance_foot_indices=stance_foot_indices,
+        body_clearance_sensor_names=body_clearance_sensor_names,
+    )
+    return height_reward * (support_floor + (1.0 - support_floor) * support_quality)
+
+
 def ang_xz_penalty(
     env: ManagerBasedRlEnv,
     target_height: float = 0.08,

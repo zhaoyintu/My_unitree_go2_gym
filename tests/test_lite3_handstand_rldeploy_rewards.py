@@ -204,6 +204,71 @@ class Lite3HandstandRLDeployRewardTest(unittest.TestCase):
         self.assertLess(float(low_reward.item()), float(half_lift_reward.item()))
         self.assertLess(float(half_lift_reward.item()), float(target_reward.item()))
 
+    def test_robotlab_l2_height_reward_matches_exact_rear_foot_target(self) -> None:
+        target_env = _FakeEnv(
+            projected_gravity=(1.0, 0.0, 0.0),
+            base_z=0.39,
+            rear_foot_z=(0.56, 0.56),
+            front_contact=(True, True),
+            rear_contact=(False, False),
+        )
+        off_target_env = _FakeEnv(
+            projected_gravity=(1.0, 0.0, 0.0),
+            base_z=0.39,
+            rear_foot_z=(0.30, 0.70),
+            front_contact=(True, True),
+            rear_contact=(False, False),
+        )
+        scrape_env = _FakeEnv(
+            projected_gravity=(1.0, 0.0, 0.0),
+            base_z=0.39,
+            rear_foot_z=(0.56, 0.56),
+            front_contact=(False, False),
+            rear_contact=(False, False),
+            trunk_contact=True,
+        )
+
+        target_reward = rewards.handstand_feet_height_l2_exp(
+            target_env,
+            target_height=0.56,
+            std=0.5,
+            stance_sensor_name="feet_ground_contact",
+            stance_foot_indices=(0, 1),
+            body_clearance_sensor_names=(
+                "trunk_ground_touch",
+                "thigh_ground_touch",
+                "calf_ground_touch",
+            ),
+        )
+        off_target_reward = rewards.handstand_feet_height_l2_exp(
+            off_target_env,
+            target_height=0.56,
+            std=0.5,
+            stance_sensor_name="feet_ground_contact",
+            stance_foot_indices=(0, 1),
+            body_clearance_sensor_names=(
+                "trunk_ground_touch",
+                "thigh_ground_touch",
+                "calf_ground_touch",
+            ),
+        )
+        scrape_reward = rewards.handstand_feet_height_l2_exp(
+            scrape_env,
+            target_height=0.56,
+            std=0.5,
+            stance_sensor_name="feet_ground_contact",
+            stance_foot_indices=(0, 1),
+            body_clearance_sensor_names=(
+                "trunk_ground_touch",
+                "thigh_ground_touch",
+                "calf_ground_touch",
+            ),
+        )
+
+        self.assertGreater(float(target_reward.item()), 0.99)
+        self.assertLess(float(off_target_reward.item()), float(target_reward.item()))
+        self.assertLess(float(scrape_reward.item()), 0.20 * float(target_reward.item()))
+
     def test_supported_gate_suppresses_head_and_thigh_scrape_local_optimum(self) -> None:
         scrape_env = _FakeEnv(
             projected_gravity=(1.0, 0.0, 0.0),

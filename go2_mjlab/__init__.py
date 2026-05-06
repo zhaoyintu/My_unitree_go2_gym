@@ -1,6 +1,6 @@
 """Go2 mjlab training package.
 
-Importing this package registers all 7 Go2 tasks with the mjlab task registry.
+Importing this package registers the local Go2 and Lite3 tasks with mjlab.
 """
 
 from go2_mjlab.mdp import commands as mdp_commands  # noqa: F401 - register PhaseCommandCfg
@@ -29,10 +29,12 @@ from go2_mjlab.config.lite3_handstand.rl_cfg import (
 from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
     unitree_lite3_handstand_rldeploy_dr_env_cfg,
     unitree_lite3_handstand_rldeploy_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_env_cfg,
 )
 from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
     unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_ppo_runner_cfg,
 )
 from mjlab.tasks.registry import register_mjlab_task
 
@@ -122,4 +124,12 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_rldeploy_dr_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_rldeploy_dr_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg(),
+)
+
+# RobotLab-style handstand rewards/terminations with RLDeploy observations and DR
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_ppo_runner_cfg(),
 )

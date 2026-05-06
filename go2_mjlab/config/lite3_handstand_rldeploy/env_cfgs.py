@@ -18,9 +18,12 @@ from go2_mjlab.config.lite3_handstand.env_cfgs import unitree_lite3_handstand_en
 from go2_mjlab.robots.lite3_constants import get_lite3_rldeploy_handstand_robot_cfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
+from mjlab.managers import CurriculumTermCfg, TerminationTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
+from mjlab.tasks.velocity import mdp as velocity_mdp
+from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
 
@@ -287,4 +290,146 @@ def unitree_lite3_handstand_rldeploy_dr_env_cfg(play: bool = False) -> ManagerBa
     _add_rldeploy_support_gate_rewards(cfg)
     if not play:
         _add_rldeploy_sim2real_dr_events(cfg)
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+    """Create a RobotLab-style Lite3 handstand task on the RLDeploy contract."""
+    cfg = unitree_lite3_handstand_rldeploy_env_cfg(play=play)
+
+    twist_cmd = cfg.commands["twist"]
+    assert isinstance(twist_cmd, UniformVelocityCommandCfg)
+    twist_cmd.rel_standing_envs = 0.25
+    twist_cmd.ranges.lin_vel_x = (-0.4, 0.4)
+    twist_cmd.ranges.lin_vel_y = (0.0, 0.0)
+    twist_cmd.ranges.ang_vel_z = (-0.4, 0.4)
+
+    static_asset_cfg = SceneEntityCfg("robot", body_names=("TORSO",))
+    support_params = {
+        "sensor_name": "feet_ground_contact",
+        "stance_foot_indices": (0, 1),
+        "body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES,
+        "target_gravity": (1.0, 0.0, 0.0),
+        "orientation_sharpness": 2.0,
+        "base_height_target": 0.39,
+        "rear_foot_target_height": 0.56,
+        "rear_foot_lift_min": 0.08,
+        "rear_foot_indices": (2, 3),
+        "foot_site_names": ("FL", "FR", "HL", "HR"),
+        "asset_cfg": static_asset_cfg,
+        "support_floor": 0.05,
+    }
+
+    rewards = cfg.rewards
+    rewards["handstand_orientation"].func = go2_mdp.handstand_orientation
+    rewards["handstand_orientation"].weight = -1.0
+    rewards["handstand_orientation"].params = {
+        "target_gravity": (1.0, 0.0, 0.0),
+    }
+    rewards["handstand_feet_height_exp"].func = go2_mdp.handstand_feet_height_l2_exp
+    rewards["handstand_feet_height_exp"].weight = 10.0
+    rewards["handstand_feet_height_exp"].params = {
+        "target_height": 0.56,
+        "std": math.sqrt(0.25),
+        "foot_indices": (2, 3),
+        "foot_site_names": ("FL", "FR", "HL", "HR"),
+        "stance_sensor_name": "feet_ground_contact",
+        "stance_foot_indices": (0, 1),
+        "body_clearance_sensor_names": BODY_CLEARANCE_SENSOR_NAMES,
+        "support_floor": 0.05,
+        "asset_cfg": static_asset_cfg,
+    }
+    rewards["handstand_feet_on_air"].weight = 5.0
+    rewards["handstand_feet_on_air"].params = {
+        "sensor_name": "feet_ground_contact",
+        "foot_indices": (2, 3),
+    }
+    rewards["base_height"].func = go2_mdp.handstand_base_height_soft
+    rewards["base_height"].weight = 0.8
+    rewards["base_height"].params = {
+        "target_height": 0.39,
+        "target_gravity": (1.0, 0.0, 0.0),
+        "orientation_sharpness": 2.0,
+        "asset_cfg": static_asset_cfg,
+    }
+    rewards["tracking_lin_vel"].func = go2_mdp.handstand_tracking_lin_vel_soft_gate
+    rewards["tracking_lin_vel"].weight = 3.0
+    rewards["tracking_lin_vel"].params = {"command_name": "twist", **support_params}
+    rewards["tracking_ang_vel"].func = go2_mdp.handstand_tracking_ang_vel_soft_gate
+    rewards["tracking_ang_vel"].weight = 1.5
+    rewards["tracking_ang_vel"].params = {"command_name": "twist", **support_params}
+    rewards["tracking_lin_vel_zero"].func = go2_mdp.handstand_tracking_lin_vel_zero_soft_gate
+    rewards["tracking_lin_vel_zero"].weight = -0.4
+    rewards["tracking_lin_vel_zero"].params = {"command_name": "twist", **support_params}
+    rewards["tracking_ang_vel_zero"].func = go2_mdp.handstand_tracking_ang_vel_zero_soft_gate
+    rewards["tracking_ang_vel_zero"].weight = -0.4
+    rewards["tracking_ang_vel_zero"].params = {"command_name": "twist", **support_params}
+    rewards["contact"].func = go2_mdp.handstand_stance_contact_mean
+    rewards["contact"].weight = 2.0
+    rewards["contact"].params = {
+        "sensor_name": "feet_ground_contact",
+        "foot_indices": (0, 1),
+    }
+    rewards["feet_air_time"].weight = 0.0
+    rewards["feet_clearance"].weight = 0.0
+    rewards["base_contact"].weight = -4.0
+    rewards["thigh_collision"].weight = -2.0
+    rewards["calf_collision"].weight = -2.0
+
+    cfg.terminations["base_contact"] = TerminationTermCfg(
+        func=go2_mdp.base_contact,
+        params={"sensor_name": "trunk_ground_touch", "force_threshold": 1.0},
+    )
+    cfg.terminations["thigh_contact"] = TerminationTermCfg(
+        func=go2_mdp.base_contact,
+        params={"sensor_name": "thigh_ground_touch"},
+    )
+    cfg.terminations["calf_contact"] = TerminationTermCfg(
+        func=go2_mdp.base_contact,
+        params={"sensor_name": "calf_ground_touch"},
+    )
+
+    if play:
+        cfg.curriculum = {}
+        twist_cmd.ranges.lin_vel_x = (-1.0, 1.0)
+        twist_cmd.ranges.lin_vel_y = (-1.0, 1.0)
+        twist_cmd.ranges.ang_vel_z = (-1.0, 1.0)
+    else:
+        assert "base_mass" in cfg.events
+        assert "base_com" in cfg.events
+        cfg.events["encoder_bias"].params["bias_range"] = (-0.02, 0.02)
+        _add_rldeploy_sim2real_dr_events(cfg)
+        cfg.curriculum["command_vel"] = CurriculumTermCfg(
+            func=velocity_mdp.commands_vel,
+            params={
+                "command_name": "twist",
+                "velocity_stages": [
+                    {
+                        "step": 0,
+                        "lin_vel_x": (-0.4, 0.4),
+                        "lin_vel_y": (0.0, 0.0),
+                        "ang_vel_z": (-0.4, 0.4),
+                    },
+                    {
+                        "step": 2000 * 24,
+                        "lin_vel_x": (-0.6, 0.6),
+                        "lin_vel_y": (-0.2, 0.2),
+                        "ang_vel_z": (-0.6, 0.6),
+                    },
+                    {
+                        "step": 5000 * 24,
+                        "lin_vel_x": (-0.8, 0.8),
+                        "lin_vel_y": (-0.5, 0.5),
+                        "ang_vel_z": (-0.8, 0.8),
+                    },
+                    {
+                        "step": 8000 * 24,
+                        "lin_vel_x": (-1.0, 1.0),
+                        "lin_vel_y": (-1.0, 1.0),
+                        "ang_vel_z": (-1.0, 1.0),
+                    },
+                ],
+            },
+        )
+
     return cfg
