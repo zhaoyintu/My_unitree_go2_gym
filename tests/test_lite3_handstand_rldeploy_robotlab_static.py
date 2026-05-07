@@ -41,6 +41,24 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
             source,
         )
 
+    def test_registers_separate_low_default_pose_task(self) -> None:
+        source = _source(INIT)
+
+        self.assertIn("unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg", source)
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg",
+            source,
+        )
+        self.assertIn('"Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose"', source)
+        self.assertIn(
+            "env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=False)",
+            source,
+        )
+        self.assertIn(
+            "play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=True)",
+            source,
+        )
+
     def test_runner_uses_separate_experiment_name(self) -> None:
         function_source = _top_level_source(
             RL_CFG,
@@ -50,6 +68,21 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn("unitree_lite3_handstand_rldeploy_ppo_runner_cfg()", function_source)
         self.assertIn(
             'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab"',
+            function_source,
+        )
+
+    def test_low_default_pose_runner_uses_separate_experiment_name(self) -> None:
+        function_source = _top_level_source(
+            RL_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg",
+        )
+
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_ppo_runner_cfg()",
+            function_source,
+        )
+        self.assertIn(
+            'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose"',
             function_source,
         )
 
@@ -118,6 +151,27 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('rewards["tracking_ang_vel"].weight = 1.5', function_source)
         self.assertIn('rewards["feet_air_time"].weight = 0.0', function_source)
         self.assertIn('rewards["feet_clearance"].weight = 0.0', function_source)
+        self.assertNotIn('rewards["default_pos"].weight = -0.15', function_source)
+        self.assertNotIn('rewards["default_pos_reward"].weight = 0.4', function_source)
+        self.assertNotIn('rewards["default_hip_pos"].weight = -0.1', function_source)
+
+    def test_low_default_pose_task_only_overrides_default_pose_rewards(self) -> None:
+        function_source = _top_level_source(
+            ENV_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg",
+        )
+
+        self.assertIn(
+            "cfg = unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play=play)",
+            function_source,
+        )
+        self.assertIn('rewards = cfg.rewards', function_source)
+        self.assertIn('rewards["default_pos"].weight = -0.15', function_source)
+        self.assertIn('rewards["default_pos_reward"].weight = 0.4', function_source)
+        self.assertIn('rewards["default_hip_pos"].weight = -0.1', function_source)
+        self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
+        self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
+        self.assertIn("return cfg", function_source)
 
     def test_robotlab_task_terminates_on_trunk_and_thigh_but_not_shank(self) -> None:
         function_source = _top_level_source(
@@ -148,6 +202,17 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertNotIn('cfg.events.pop("base_mass"', function_source)
         self.assertNotIn('cfg.events.pop("base_com"', function_source)
         self.assertIn('cfg.events["encoder_bias"].params["bias_range"] = (-0.02, 0.02)', function_source)
+
+        helper_source = _top_level_source(ENV_CFG, "_add_rldeploy_sim2real_dr_events")
+        for event_name in (
+            '"pd_gains"',
+            '"motor_strength"',
+            '"joint_friction"',
+            '"joint_damping"',
+            '"joint_armature"',
+            '"link_inertia"',
+        ):
+            self.assertIn(event_name, helper_source)
 
     def test_robotlab_height_reward_function_exists(self) -> None:
         reward_source = _top_level_source(REWARDS, "handstand_feet_height_l2_exp")

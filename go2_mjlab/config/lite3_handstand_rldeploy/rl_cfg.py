@@ -21,3 +21,9 @@ def unitree_lite3_handstand_rldeploy_robotlab_ppo_runner_cfg() -> RslRlOnPolicyR
     cfg = unitree_lite3_handstand_rldeploy_ppo_runner_cfg()
     cfg.experiment_name = "lite3_handstand_rldeploy_robotlab"
     return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_ppo_runner_cfg()
+    cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose"
+    return cfg
