@@ -376,9 +376,6 @@ def unitree_lite3_handstand_rldeploy_robotlab_env_cfg(play: bool = False) -> Man
     }
     rewards["feet_air_time"].weight = 0.0
     rewards["feet_clearance"].weight = 0.0
-    rewards["default_pos"].weight = -0.15
-    rewards["default_pos_reward"].weight = 0.4
-    rewards["default_hip_pos"].weight = -0.1
     rewards["base_contact"].weight = -4.0
     rewards["thigh_collision"].weight = -2.0
     rewards["calf_collision"].weight = -2.0
