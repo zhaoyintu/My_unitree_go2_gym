@@ -4,6 +4,7 @@
 Usage:
   python scripts/train_go2.py Mjlab-Go2-Handstand
   python scripts/train_go2.py Mjlab-Lite3-Handstand-Robust
+  python scripts/train_go2.py Mjlab-G1-Handstand-RLDeploy-RobotLab-LowDefaultPose
   python scripts/train_go2.py Mjlab-Go2-Trot-Flat --env.scene.num_envs 4096
   python scripts/train_go2.py --list  # list available tasks
 
@@ -21,9 +22,23 @@ if str(_project_root) not in sys.path:
 
 import go2_mjlab  # noqa: E402, F401 — registers Go2 tasks
 
+
+def _apply_task_alias(argv: list[str]) -> None:
+    """Rewrite decorated task names before handing off to mjlab."""
+    aliases = {
+        "Mjlab-G1-": "Mjlab-Lite3-",
+    }
+    for index, arg in enumerate(argv[1:], start=1):
+        for alias_prefix, target_prefix in aliases.items():
+            if arg.startswith(alias_prefix):
+                argv[index] = target_prefix + arg[len(alias_prefix):]
+                return
+
+
 # Now delegate to mjlab's train script.
 # We patch sys.argv to pass through the task name and any overrides.
 if __name__ == "__main__":
     from mjlab.scripts.train import main as mjlab_train_main
 
+    _apply_task_alias(sys.argv)
     mjlab_train_main()
