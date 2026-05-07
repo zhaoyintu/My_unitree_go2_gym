@@ -77,6 +77,27 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
             source,
         )
 
+    def test_registers_separate_low_default_pose_zero_stance_task(self) -> None:
+        source = _source(INIT)
+
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg",
+            source,
+        )
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg",
+            source,
+        )
+        self.assertIn('"Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-ZeroStance"', source)
+        self.assertIn(
+            "env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg(play=False)",
+            source,
+        )
+        self.assertIn(
+            "play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg(play=True)",
+            source,
+        )
+
     def test_runner_uses_separate_experiment_name(self) -> None:
         function_source = _top_level_source(
             RL_CFG,
@@ -116,6 +137,21 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         )
         self.assertIn(
             'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_no_default_pose"',
+            function_source,
+        )
+
+    def test_low_default_pose_zero_stance_runner_uses_separate_experiment_name(self) -> None:
+        function_source = _top_level_source(
+            RL_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg",
+        )
+
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg()",
+            function_source,
+        )
+        self.assertIn(
+            'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance"',
             function_source,
         )
 
@@ -220,6 +256,36 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('rewards["default_pos"].weight = 0.0', function_source)
         self.assertIn('rewards["default_pos_reward"].weight = 0.0', function_source)
         self.assertIn('rewards["default_hip_pos"].weight = 0.0', function_source)
+        self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
+        self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
+        self.assertIn("return cfg", function_source)
+
+    def test_low_default_pose_zero_stance_task_adds_zero_command_stability_rewards(self) -> None:
+        source = _source(ENV_CFG)
+        function_source = _top_level_source(
+            ENV_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg",
+        )
+
+        self.assertIn("RewardTermCfg", source)
+        self.assertIn(
+            "cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=play)",
+            function_source,
+        )
+        self.assertIn('rewards = cfg.rewards', function_source)
+        self.assertIn('rewards["zero_stance_contact"] = RewardTermCfg(', function_source)
+        self.assertIn("func=go2_mdp.handstand_stance_contact_zero", function_source)
+        self.assertIn("weight=1.0", function_source)
+        self.assertIn('"sensor_name": "feet_ground_contact"', function_source)
+        self.assertIn('"foot_indices": (0, 1)', function_source)
+        self.assertIn('"command_name": "twist"', function_source)
+        self.assertIn('"moving_threshold": 0.1', function_source)
+        self.assertIn('rewards["zero_joint_vel"] = RewardTermCfg(', function_source)
+        self.assertIn("func=go2_mdp.handstand_joint_vel_zero", function_source)
+        self.assertIn("weight=-0.02", function_source)
+        self.assertIn('SceneEntityCfg("robot", joint_names=(".*",))', function_source)
+        self.assertIn('rewards["lin_vel_z"].weight = 0.4', function_source)
+        self.assertIn('rewards["action_rate_l2"].weight = -0.08', function_source)
         self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
         self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
         self.assertIn("return cfg", function_source)

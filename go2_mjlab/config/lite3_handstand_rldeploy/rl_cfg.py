@@ -29,6 +29,12 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg() 
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg()
+    cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance"
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg()
     cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_no_default_pose"

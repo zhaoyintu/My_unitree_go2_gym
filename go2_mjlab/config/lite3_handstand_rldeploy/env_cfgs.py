@@ -21,6 +21,7 @@ from mjlab.envs import mdp as envs_mdp
 from mjlab.managers import CurriculumTermCfg, TerminationTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.tasks.velocity import mdp as velocity_mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
@@ -447,6 +448,38 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(
     rewards["default_pos"].weight = -0.15
     rewards["default_pos_reward"].weight = 0.4
     rewards["default_hip_pos"].weight = -0.1
+
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Low-default-pose variant with stronger zero-command stance stability."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["zero_stance_contact"] = RewardTermCfg(
+        func=go2_mdp.handstand_stance_contact_zero,
+        weight=1.0,
+        params={
+            "sensor_name": "feet_ground_contact",
+            "foot_indices": (0, 1),
+            "command_name": "twist",
+            "moving_threshold": 0.1,
+        },
+    )
+    rewards["zero_joint_vel"] = RewardTermCfg(
+        func=go2_mdp.handstand_joint_vel_zero,
+        weight=-0.02,
+        params={
+            "command_name": "twist",
+            "moving_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+        },
+    )
+    rewards["lin_vel_z"].weight = 0.4
+    rewards["action_rate_l2"].weight = -0.08
 
     return cfg
 
