@@ -59,6 +59,24 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
             source,
         )
 
+    def test_registers_separate_no_default_pose_task(self) -> None:
+        source = _source(INIT)
+
+        self.assertIn("unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg", source)
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_ppo_runner_cfg",
+            source,
+        )
+        self.assertIn('"Mjlab-Lite3-Handstand-RLDeploy-RobotLab-NoDefaultPose"', source)
+        self.assertIn(
+            "env_cfg=unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(play=False)",
+            source,
+        )
+        self.assertIn(
+            "play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(play=True)",
+            source,
+        )
+
     def test_runner_uses_separate_experiment_name(self) -> None:
         function_source = _top_level_source(
             RL_CFG,
@@ -83,6 +101,21 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         )
         self.assertIn(
             'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose"',
+            function_source,
+        )
+
+    def test_no_default_pose_runner_uses_separate_experiment_name(self) -> None:
+        function_source = _top_level_source(
+            RL_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_ppo_runner_cfg",
+        )
+
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg()",
+            function_source,
+        )
+        self.assertIn(
+            'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_no_default_pose"',
             function_source,
         )
 
@@ -169,6 +202,24 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('rewards["default_pos"].weight = -0.15', function_source)
         self.assertIn('rewards["default_pos_reward"].weight = 0.4', function_source)
         self.assertIn('rewards["default_hip_pos"].weight = -0.1', function_source)
+        self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
+        self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
+        self.assertIn("return cfg", function_source)
+
+    def test_no_default_pose_task_only_zeroes_default_pose_rewards(self) -> None:
+        function_source = _top_level_source(
+            ENV_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg",
+        )
+
+        self.assertIn(
+            "cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=play)",
+            function_source,
+        )
+        self.assertIn('rewards = cfg.rewards', function_source)
+        self.assertIn('rewards["default_pos"].weight = 0.0', function_source)
+        self.assertIn('rewards["default_pos_reward"].weight = 0.0', function_source)
+        self.assertIn('rewards["default_hip_pos"].weight = 0.0', function_source)
         self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
         self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
         self.assertIn("return cfg", function_source)

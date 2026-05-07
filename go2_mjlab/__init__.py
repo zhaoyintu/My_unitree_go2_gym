@@ -30,12 +30,14 @@ from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
     unitree_lite3_handstand_rldeploy_dr_env_cfg,
     unitree_lite3_handstand_rldeploy_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_env_cfg,
 )
 from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
     unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_ppo_runner_cfg,
 )
 from mjlab.tasks.registry import register_mjlab_task
@@ -142,4 +144,12 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg(),
+)
+
+# RobotLab task variant for isolating the effect of removing default-pose shaping
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-NoDefaultPose",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_ppo_runner_cfg(),
 )

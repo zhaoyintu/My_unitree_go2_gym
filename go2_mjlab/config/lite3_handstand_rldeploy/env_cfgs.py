@@ -449,3 +449,17 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(
     rewards["default_hip_pos"].weight = -0.1
 
     return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """RobotLab task variant with desired-joint-pose shaping disabled."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["default_pos"].weight = 0.0
+    rewards["default_pos_reward"].weight = 0.0
+    rewards["default_hip_pos"].weight = 0.0
+
+    return cfg
