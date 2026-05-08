@@ -98,6 +98,27 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
             source,
         )
 
+    def test_registers_separate_low_default_pose_quiet_zero_stance_task(self) -> None:
+        source = _source(INIT)
+
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg",
+            source,
+        )
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg",
+            source,
+        )
+        self.assertIn('"Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-QuietZeroStance"', source)
+        self.assertIn(
+            "env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(play=False)",
+            source,
+        )
+        self.assertIn(
+            "play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(play=True)",
+            source,
+        )
+
     def test_runner_uses_separate_experiment_name(self) -> None:
         function_source = _top_level_source(
             RL_CFG,
@@ -152,6 +173,21 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         )
         self.assertIn(
             'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance"',
+            function_source,
+        )
+
+    def test_low_default_pose_quiet_zero_stance_runner_uses_separate_experiment_name(self) -> None:
+        function_source = _top_level_source(
+            RL_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg",
+        )
+
+        self.assertIn(
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg()",
+            function_source,
+        )
+        self.assertIn(
+            'cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance"',
             function_source,
         )
 
@@ -286,6 +322,29 @@ class Lite3HandstandRLDeployRobotLabStaticTest(unittest.TestCase):
         self.assertIn('SceneEntityCfg("robot", joint_names=(".*",))', function_source)
         self.assertIn('rewards["lin_vel_z"].weight = 0.4', function_source)
         self.assertIn('rewards["action_rate_l2"].weight = -0.08', function_source)
+        self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
+        self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
+        self.assertIn("return cfg", function_source)
+
+    def test_low_default_pose_quiet_zero_stance_task_strengthens_zero_command_stability(self) -> None:
+        function_source = _top_level_source(
+            ENV_CFG,
+            "unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg",
+        )
+
+        self.assertIn(
+            "cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg(play=play)",
+            function_source,
+        )
+        self.assertIn('twist_cmd = cfg.commands["twist"]', function_source)
+        self.assertIn("assert isinstance(twist_cmd, UniformVelocityCommandCfg)", function_source)
+        self.assertIn("twist_cmd.rel_standing_envs = 0.40", function_source)
+        self.assertIn('rewards = cfg.rewards', function_source)
+        self.assertIn('rewards["zero_stance_contact"].weight = 3.0', function_source)
+        self.assertIn('rewards["zero_joint_vel"].weight = -0.08', function_source)
+        self.assertIn('rewards["dof_acc"].weight = -1.0e-3', function_source)
+        self.assertIn('rewards["action_rate_l2"].weight = -0.12', function_source)
+        self.assertIn('rewards["lin_vel_z"].weight = 0.6', function_source)
         self.assertNotIn("_add_rldeploy_sim2real_dr_events(cfg)", function_source)
         self.assertNotIn('cfg.curriculum["command_vel"]', function_source)
         self.assertIn("return cfg", function_source)

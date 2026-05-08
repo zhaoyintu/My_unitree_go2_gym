@@ -484,6 +484,26 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_c
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Low-default-pose zero-stance variant with stronger quiet standing costs."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg(play=play)
+
+    twist_cmd = cfg.commands["twist"]
+    assert isinstance(twist_cmd, UniformVelocityCommandCfg)
+    twist_cmd.rel_standing_envs = 0.40
+
+    rewards = cfg.rewards
+    rewards["zero_stance_contact"].weight = 3.0
+    rewards["zero_joint_vel"].weight = -0.08
+    rewards["dof_acc"].weight = -1.0e-3
+    rewards["action_rate_l2"].weight = -0.12
+    rewards["lin_vel_z"].weight = 0.6
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
