@@ -1133,6 +1133,42 @@ def handstand_contact(
     return (n_contact == 1).float() * (quality > 0.70).float() * moving_mask
 
 
+def handstand_moving_no_stance_contact(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...],
+    command_name: str,
+    moving_threshold: float = 0.1,
+    target_height: float = 0.08,
+) -> torch.Tensor:
+    """Penalize moving handstand frames with no indexed stance foot planted."""
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0
+    selected = contact[:, list(foot_indices)]
+    n_contact = torch.sum(selected, dim=1)
+    quality = _handstand_quality(env, target_height)
+    moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+    return (n_contact == 0).float() * (quality > 0.70).float() * moving_mask
+
+
+def handstand_moving_double_stance_contact(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...],
+    command_name: str,
+    moving_threshold: float = 0.1,
+    target_height: float = 0.08,
+) -> torch.Tensor:
+    """Weakly penalize moving handstand frames with all indexed stance feet planted."""
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0
+    selected = contact[:, list(foot_indices)]
+    n_contact = torch.sum(selected, dim=1)
+    quality = _handstand_quality(env, target_height)
+    moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+    return (n_contact == len(foot_indices)).float() * (quality > 0.70).float() * moving_mask
+
+
 class handstand_feet_air_time:
     """Reward indexed STANCE feet for long air-time → ground-contact strides.
 

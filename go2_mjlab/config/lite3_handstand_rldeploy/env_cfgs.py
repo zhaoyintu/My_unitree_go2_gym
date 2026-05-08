@@ -504,6 +504,42 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Quiet zero-stance variant that encourages alternating front-paw steps when moving."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    moving_contact_params = {
+        "sensor_name": "feet_ground_contact",
+        "foot_indices": (0, 1),
+        "command_name": "twist",
+        "moving_threshold": 0.1,
+    }
+    rewards["contact"].weight = 0.0
+    rewards["moving_single_stance_contact"] = RewardTermCfg(
+        func=go2_mdp.handstand_contact,
+        weight=2.5,
+        params=moving_contact_params,
+    )
+    rewards["moving_both_front_feet_air"] = RewardTermCfg(
+        func=go2_mdp.handstand_moving_no_stance_contact,
+        weight=-2.0,
+        params=moving_contact_params,
+    )
+    rewards["moving_double_front_contact"] = RewardTermCfg(
+        func=go2_mdp.handstand_moving_double_stance_contact,
+        weight=-0.5,
+        params=moving_contact_params,
+    )
+    rewards["feet_air_time"].weight = 0.5
+    rewards["feet_air_time"].params["command_name"] = "twist"
+    rewards["feet_air_time"].params["moving_threshold"] = 0.1
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:

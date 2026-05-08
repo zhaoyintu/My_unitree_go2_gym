@@ -30,6 +30,7 @@ from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
     unitree_lite3_handstand_rldeploy_dr_env_cfg,
     unitree_lite3_handstand_rldeploy_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_env_cfg,
@@ -39,6 +40,7 @@ from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
     unitree_lite3_handstand_rldeploy_dr_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_no_default_pose_ppo_runner_cfg,
@@ -164,6 +166,14 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg(),
+)
+
+# Quiet zero-stance variant that encourages alternating front-paw steps when moving
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-QuietStep",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_ppo_runner_cfg(),
 )
 
 # RobotLab task variant for isolating the effect of removing default-pose shaping
