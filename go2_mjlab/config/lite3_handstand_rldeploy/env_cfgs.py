@@ -504,6 +504,33 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Quiet zero-stance variant with an unconditional anti-hop penalty.
+
+    Adds a single reward, ``stance_air_penalty``, that fires whenever both
+    front (stance) feet are airborne while the body is in handstand pose.
+    Applies in both zero-command and non-zero-command phases so the policy
+    cannot satisfy velocity tracking by hopping.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["feet_air_time"].weight = 0.0
+    rewards["stance_air_penalty"] = RewardTermCfg(
+        func=go2_mdp.handstand_stance_air_penalty,
+        weight=-2.0,
+        params={
+            "sensor_name": "feet_ground_contact",
+            "foot_indices": (0, 1),
+            "target_height": 0.08,
+        },
+    )
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:

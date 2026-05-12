@@ -1151,6 +1151,27 @@ def handstand_moving_no_stance_contact(
     return (n_contact == 0).float() * (quality > 0.70).float() * moving_mask
 
 
+def handstand_stance_air_penalty(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    foot_indices: tuple[int, ...],
+    target_height: float = 0.08,
+) -> torch.Tensor:
+    """Anti-hop: penalize handstand frames with all stance feet airborne.
+
+    Unlike ``handstand_moving_no_stance_contact`` this term has no
+    command-based gate and fires whether the policy is commanded to move
+    or stand. The orientation gate keeps the term silent while the body
+    is collapsing or not yet in handstand pose.
+    """
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact = contact_sensor.data.found > 0
+    selected = contact[:, list(foot_indices)]
+    n_contact = torch.sum(selected, dim=1)
+    quality = _handstand_quality(env, target_height)
+    return (n_contact == 0).float() * (quality > 0.70).float()
+
+
 def handstand_moving_double_stance_contact(
     env: ManagerBasedRlEnv,
     sensor_name: str,
