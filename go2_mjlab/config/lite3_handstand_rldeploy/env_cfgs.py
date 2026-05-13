@@ -559,6 +559,42 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_e
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """BigStep variant that breaks out of the residual hop basin.
+
+    BigStep v2 trained to high tracking (~2.0) but locked into a double-foot
+    hop at ~15% both-front-airborne rate. ``feet_air_time`` (≥0.4 s swing)
+    never paid out so it produced no gradient toward stepping. This variant
+    adds an active pull toward single-stance gait phase and a stronger
+    push out of hops:
+
+      * ``single_stance_contact`` (+1.5): reward exactly one front foot
+        planted while moving and in handstand. Same function the QuietStep
+        attempt used, but at moderate weight without the toxic
+        ``moving_double_stance`` penalty that broke that experiment.
+      * ``stance_air_penalty`` -3.0 → -5.0: nearly double the cost of both
+        front feet airborne.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["single_stance_contact"] = RewardTermCfg(
+        func=go2_mdp.handstand_contact,
+        weight=1.5,
+        params={
+            "sensor_name": "feet_ground_contact",
+            "foot_indices": (0, 1),
+            "command_name": "twist",
+            "moving_threshold": 0.1,
+        },
+    )
+    rewards["stance_air_penalty"].weight = -5.0
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
