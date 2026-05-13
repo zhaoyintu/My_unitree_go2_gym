@@ -531,6 +531,34 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_env_cfg(
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """NoHop variant tuned for slower, larger-amplitude stepping gait.
+
+    Builds on the NoHop policy by:
+      * Re-enabling ``feet_air_time`` (front feet, moving-only) so each
+        swing leg is rewarded for staying airborne ≥0.4 s, pushing the
+        policy toward longer strides instead of rapid micro-shuffle.
+      * Strengthening ``dof_acc`` and ``action_rate_l2`` penalties to
+        suppress the high-frequency twitches that the NoHop baseline
+        learned for balance/locomotion.
+      * Bumping ``stance_air_penalty`` to drop the ~14% moving-phase
+        both-front-airborne rate observed in the NoHop policy.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["feet_air_time"].weight = 0.5
+    rewards["feet_air_time"].params["command_name"] = "twist"
+    rewards["feet_air_time"].params["moving_threshold"] = 0.1
+    rewards["dof_acc"].weight = -5.0e-3
+    rewards["action_rate_l2"].weight = -0.25
+    rewards["stance_air_penalty"].weight = -3.0
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
