@@ -595,6 +595,32 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v2_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v4: stretch the step amplitude, slow the step frequency.
+
+    Stride v3 trained to 0% hop but the policy farmed ``single_stance_contact``
+    by lifting front feet for only a couple of physics steps (~0.04 s),
+    yielding a rapid micro-shuffle gait. This variant:
+
+      * Reduces ``single_stance_contact`` (1.5 → 0.3) so the brief-lift
+        farm is no longer the easy strategy.
+      * Triples ``feet_air_time`` (0.5 → 1.5) so a ≥0.4 s single-leg swing
+        is meaningfully more rewarding than a brief tiptoe.
+      * Stiffens ``dof_acc`` (-2e-3 → -3e-3) so rapid joint motion pays
+        more, nudging the policy toward fewer-but-larger leg cycles.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["single_stance_contact"].weight = 0.3
+    rewards["feet_air_time"].weight = 1.5
+    rewards["dof_acc"].weight = -3.0e-3
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
