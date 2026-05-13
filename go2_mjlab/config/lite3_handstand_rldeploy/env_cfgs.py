@@ -552,8 +552,8 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_e
     rewards["feet_air_time"].weight = 0.5
     rewards["feet_air_time"].params["command_name"] = "twist"
     rewards["feet_air_time"].params["moving_threshold"] = 0.1
-    rewards["dof_acc"].weight = -5.0e-3
-    rewards["action_rate_l2"].weight = -0.25
+    rewards["dof_acc"].weight = -2.0e-3
+    rewards["action_rate_l2"].weight = -0.16
     rewards["stance_air_penalty"].weight = -3.0
 
     return cfg
