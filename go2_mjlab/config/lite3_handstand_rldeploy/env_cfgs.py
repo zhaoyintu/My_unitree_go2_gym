@@ -670,6 +670,31 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v7: bigger and slower swing target.
+
+    Stride V4 trained to a non-shuffle stepping gait but the lift looked
+    visually small. The previous sinusoidal target was 0.06 m peak on a
+    1.0 s cycle — about 6 cm foot lift at 1 Hz step frequency. This
+    variant doubles the lift amplitude and slows the rhythm so each step
+    looks like a deliberate stride:
+
+      * ``target_foot_height`` 0.06 → 0.12 m (≈30° hip swing for Lite3)
+      * ``cycle_time`` 1.0 → 1.5 s (0.75 s swing duration per foot)
+      * ``feet_clearance.weight`` 0.6 → 1.0 (stronger pull on the target)
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v4_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["feet_clearance"].weight = 1.0
+    rewards["feet_clearance"].params["target_foot_height"] = 0.12
+    rewards["feet_clearance"].params["cycle_time"] = 1.5
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
