@@ -37,6 +37,7 @@ from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v3_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v4_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg,
@@ -54,6 +55,7 @@ from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v3_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v4_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg,
@@ -244,6 +246,14 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_ppo_runner_cfg(),
+)
+
+# Stride v8: amplify swing rewards to push past the v7 plateau
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-NoHop-BigStep-Stride-V6",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_ppo_runner_cfg(),
 )
 
 # RobotLab task variant for isolating the effect of removing default-pose shaping

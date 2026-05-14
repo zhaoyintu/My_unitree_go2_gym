@@ -695,6 +695,28 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v8: amplify swing rewards to push past the V5 plateau.
+
+    Stride V5 trained to a working stepping gait but ``feet_clearance``
+    stalled at ~0.36/1.0 — the policy was only achieving 30-40% of the
+    sinusoidal target. Doubling the long-swing payouts gives the policy
+    a stronger reason to invest joint energy in deeper, longer lifts:
+
+      * ``feet_air_time`` 1.5 → 3.0 (≥0.4 s single-leg swings worth 2x)
+      * ``feet_clearance`` 1.0 → 1.5 (sinusoidal tracking worth 1.5x)
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v5_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["feet_air_time"].weight = 3.0
+    rewards["feet_clearance"].weight = 1.5
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
