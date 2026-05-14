@@ -621,6 +621,32 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v3_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v5: force a 1 Hz sinusoidal stepping rhythm via feet_clearance.
+
+    Stride v4 trained to a stable no-hop shuffle but the joints still
+    moved at high frequency — visually a rapid drag rather than a stride.
+    Free-form reward shaping (air_time threshold, single-stance bonus)
+    failed to surface a long-swing gait. This variant re-enables the
+    explicit ``handstand_feet_clearance`` sinusoid that forces each front
+    foot to track a |sin(2π t)|·0.06 m world-z target during its half of
+    a 1.0 s cycle, and pulls back ``single_stance_contact`` so the two
+    signals don't fight.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v2_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["feet_clearance"].weight = 0.6
+    rewards["feet_clearance"].params["cycle_time"] = 1.0
+    rewards["feet_clearance"].params["command_name"] = "twist"
+    rewards["feet_clearance"].params["moving_threshold"] = 0.1
+    rewards["single_stance_contact"].weight = 0.1
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
