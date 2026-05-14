@@ -647,6 +647,29 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v4_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v6: remove the ``contact`` mean reward that punishes stepping.
+
+    Stride V3 inherited ``contact`` (``handstand_stance_contact_mean``) at
+    weight +2.0 from the RobotLab base. That term scores 1.0 for both
+    front feet planted and 0.5 for a single foot — so every swing forfeits
+    a hefty per-step bonus, swamping the +1.5 ``feet_air_time`` and +0.6
+    ``feet_clearance`` signals that should drive stepping. Anti-hop is
+    fully covered by ``stance_air_penalty -5.0`` and quiet zero-command
+    stance by ``zero_stance_contact +3.0``, so the ``contact`` term is
+    redundant. This variant disables it so the swing-encouraging signals
+    can dominate when the command is non-zero.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v3_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["contact"].weight = 0.0
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
