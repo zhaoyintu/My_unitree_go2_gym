@@ -717,6 +717,38 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+# Stride v7 lower-HipY desire pose: front legs sit at the middle of the
+# HipY range instead of the upper limit, leaving ±0.2 rad of headroom on
+# both sides so the policy can swing the front leg forward during a step.
+# Rear stays at the Lite3 normal standing rest pose.
+_STRIDE_FRONT_DESIRE_OPEN = (0.0, 0.1, 2.0)
+_STRIDE_REAR_DESIRE = (0.0, -0.8, 1.6)
+LITE3_STRIDE_OPEN_DESIRE_JOINT_ANGLES = list(
+    _STRIDE_FRONT_DESIRE_OPEN * 2 + _STRIDE_REAR_DESIRE * 2
+)
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v7_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v9: open HipY headroom so the front legs can swing forward.
+
+    Stride V6 plateaued because the desired HipY (0.283 rad) sits at 90%
+    of the joint's upper limit. The default-pose rewards bias the policy
+    toward this value, leaving only ~0.03 rad of forward swing range —
+    feet can lift but not displace forward, producing a body-slides-past
+    rapid-shuffle visual. This variant retargets desired HipY to 0.1 rad
+    (middle of range) so ±0.2 rad of swing is available in both directions.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v6_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["default_pos"].params["desire_joint_angles"] = LITE3_STRIDE_OPEN_DESIRE_JOINT_ANGLES
+    rewards["default_pos_reward"].params["desire_joint_angles"] = LITE3_STRIDE_OPEN_DESIRE_JOINT_ANGLES
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
