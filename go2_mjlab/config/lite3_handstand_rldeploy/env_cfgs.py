@@ -749,6 +749,41 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v8_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v10: aggressive 4-knob change to break the V7 plateau.
+
+    V7's HipY-open desire pose helped (got past V6's start fast) but
+    feet_clearance still plateaued near 0.55. The remaining ceiling is
+    a combination of three constraints all pulling the policy away from
+    "swing harder":
+
+      * ``dof_acc -3e-3`` and ``action_rate_l2 -0.16`` make rapid joint
+        motion expensive — capping the speed of takeoff/landing.
+      * ``feet_clearance`` sharpness 10 lets the policy stop tracking
+        at ~7 cm error and still pocket 50% of the per-foot reward.
+      * ``target_foot_height = 0.12 m`` is the visual ceiling — at 30 cm
+        body height it reads as a modest lift.
+
+    Relax the cost terms, tighten the tracking reward, raise the target:
+
+      * ``dof_acc`` -3e-3 → -1e-3 (back to NoHop baseline)
+      * ``action_rate_l2`` -0.16 → -0.10 (back to NoHop baseline)
+      * ``feet_clearance`` sharpness 10 → 20 (half-error for same score)
+      * ``feet_clearance.target_foot_height`` 0.12 → 0.15 m
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v7_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["dof_acc"].weight = -1.0e-3
+    rewards["action_rate_l2"].weight = -0.10
+    rewards["feet_clearance"].params["target_foot_height"] = 0.15
+    rewards["feet_clearance"].params["sharpness"] = 20.0
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:

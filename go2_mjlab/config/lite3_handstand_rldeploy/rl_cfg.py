@@ -95,6 +95,12 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v8_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v7_ppo_runner_cfg()
+    cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v8"
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg()
     cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step"

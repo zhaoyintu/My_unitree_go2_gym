@@ -1242,6 +1242,7 @@ def handstand_feet_clearance(
     command_name: str | None = None,
     moving_threshold: float = 0.1,
     target_height: float = 0.08,
+    sharpness: float = 10.0,
 ) -> torch.Tensor:
     """Sinusoidal indexed-foot clearance reward.
 
@@ -1250,6 +1251,11 @@ def handstand_feet_clearance(
     handstand walking, pass the front stance pair `(0, 1)`. `foot_site_names`
     must list all four foot sites in the same order used elsewhere in the env
     (Go2 default "FR/FL/RR/RL"; Lite3 uses "FL/FR/HL/HR").
+
+    ``sharpness`` controls the per-foot reward profile: the reward is
+    ``exp(-sharpness · |z_world - z_target|)`` so larger values demand
+    tighter tracking. Default 10.0 gives ~0.37 at 10 cm error; 20.0 needs
+    half the error for the same reward.
     """
     assert len(foot_indices) == 2, "handstand_feet_clearance expects exactly two feet"
     asset: Entity = env.scene[asset_cfg.name]
@@ -1262,8 +1268,8 @@ def handstand_feet_clearance(
     swing_mask_0 = (phase >= 0.5).float()  # foot 0 swings in second half
     swing_mask_1 = (phase < 0.5).float()   # foot 1 swings in first half
 
-    rew = torch.exp(-torch.abs(selected_z[:, 0] - target) * 10) * swing_mask_0
-    rew += torch.exp(-torch.abs(selected_z[:, 1] - target) * 10) * swing_mask_1
+    rew = torch.exp(-torch.abs(selected_z[:, 0] - target) * sharpness) * swing_mask_0
+    rew += torch.exp(-torch.abs(selected_z[:, 1] - target) * sharpness) * swing_mask_1
 
     quality = _handstand_quality(env, target_height)
     moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
