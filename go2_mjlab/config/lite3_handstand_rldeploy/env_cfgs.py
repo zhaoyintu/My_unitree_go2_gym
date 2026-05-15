@@ -784,6 +784,38 @@ def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_s
     return cfg
 
 
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v9_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Stride v11: relax rewards that oppose alternating stride.
+
+    The V8 audit (see ``2026-05-15-stride-v10-reward-audit.md``) flagged
+    three reward terms that mildly fight the stepping objective. Rather
+    than add yet another push reward, this variant turns those three
+    counter-forces down:
+
+      * ``symmetric_joints`` -0.1 → 0.0 — alternating gait is inherently
+        asymmetric (one foot up, the other planted), so this penalty was
+        constantly pricing the desired behaviour.
+      * ``default_pos`` -0.15 → -0.05 and ``default_pos_reward`` 0.4 →
+        0.15 — the front leg has to deviate from the static handstand
+        target during every swing; halving the pull lets that happen
+        cheaply.
+      * ``lin_vel_z`` 0.6 → 0.2 — leaves a smaller anti-bob bias so the
+        body can dip slightly into each stride, while still discouraging
+        full hops (those are covered by ``stance_air_penalty``).
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v8_env_cfg(play=play)
+
+    rewards = cfg.rewards
+    rewards["symmetric_joints"].weight = 0.0
+    rewards["default_pos"].weight = -0.05
+    rewards["default_pos_reward"].weight = 0.15
+    rewards["lin_vel_z"].weight = 0.2
+
+    return cfg
+
+
 def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg(
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
