@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GO2 × LITE3 Handstand · 详细对比数据表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    /* canvas */
+    --bg:#0a0e16;
+    --bg-grid:rgba(120,150,200,.045);
+    --panel:#111824;
+    --panel-2:#0e141f;
+    --panel-edge:#1f2b3d;
+    --ink:#dfe7f2;
+    --ink-dim:#8595ab;
+    --ink-faint:#5b6982;
+    /* robot identity */
+    --go2:#46c8f0;        /* cyan */
+    --go2-soft:rgba(70,200,240,.13);
+    --lite3:#ffce5c;      /* gold */
+    --lite3-soft:rgba(255,206,92,.13);
+    /* diff status */
+    --same:#34d69b;
+    --same-soft:rgba(52,214,155,.12);
+    --diff:#ff8a4c;
+    --diff-soft:rgba(255,138,76,.12);
+    --risk:#ff5d7a;
+    --risk-soft:rgba(255,93,122,.13);
+    --shadow:0 24px 60px -28px rgba(0,0,0,.85);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      linear-gradient(var(--bg-grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--bg-grid) 1px,transparent 1px),
+      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(70,200,240,.08), transparent 60%),
+      radial-gradient(ellipse 70% 50% at 95% 0%, rgba(255,206,92,.06), transparent 55%),
+      var(--bg);
+    background-size:42px 42px,42px 42px,100% 100%,100% 100%;
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;}
+
+  /* ---------- top nav ---------- */
+  header.bar{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(14px);
+    background:linear-gradient(180deg,rgba(10,14,22,.94),rgba(10,14,22,.72));
+    border-bottom:1px solid var(--panel-edge);
+  }
+  .bar-inner{
+    max-width:1240px;margin:0 auto;padding:.7rem 1.4rem;
+    display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;
+  }
+  .brand{font-family:"Chakra Petch";font-weight:700;letter-spacing:.06em;font-size:.95rem;color:var(--ink);}
+  .brand b{color:var(--go2);}
+  .brand i{color:var(--lite3);font-style:normal;}
+  nav.jump{display:flex;gap:.3rem;flex-wrap:wrap;margin-left:auto;}
+  nav.jump a{
+    font-family:"IBM Plex Mono";font-size:.72rem;letter-spacing:.04em;
+    color:var(--ink-dim);text-decoration:none;padding:.32rem .6rem;border-radius:6px;
+    border:1px solid transparent;transition:.18s;white-space:nowrap;
+  }
+  nav.jump a:hover{color:var(--ink);background:rgba(120,150,200,.08);}
+  nav.jump a.active{color:var(--go2);border-color:var(--panel-edge);background:var(--go2-soft);}
+  .toggle{
+    display:flex;align-items:center;gap:.5rem;font-family:"IBM Plex Mono";font-size:.72rem;
+    color:var(--ink-dim);cursor:pointer;user-select:none;padding:.32rem .6rem;border-radius:6px;
+    border:1px solid var(--panel-edge);transition:.18s;
+  }
+  .toggle:hover{color:var(--ink);}
+  .toggle.on{color:var(--diff);border-color:var(--diff);background:var(--diff-soft);}
+  .toggle .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-faint);transition:.18s;}
+  .toggle.on .dot{background:var(--diff);box-shadow:0 0 8px var(--diff);}
+
+  /* ---------- layout ---------- */
+  main{max-width:1240px;margin:0 auto;padding:0 1.4rem 6rem;}
+  section{padding-top:3.4rem;}
+  .sec-tag{
+    font-family:"IBM Plex Mono";font-size:.7rem;letter-spacing:.22em;color:var(--ink-faint);
+    text-transform:uppercase;display:flex;align-items:center;gap:.7rem;margin-bottom:.5rem;
+  }
+  .sec-tag::before{content:"";width:26px;height:1px;background:var(--ink-faint);}
+  h2{
+    font-family:"Chakra Petch";font-weight:700;font-size:1.65rem;letter-spacing:.01em;
+    margin:.1rem 0 1.1rem;color:var(--ink);
+  }
+  h2 .num{color:var(--go2);font-size:1.1rem;margin-right:.5rem;opacity:.8;}
+  p.lead{color:var(--ink-dim);max-width:74ch;margin:.2rem 0 1.4rem;}
+  .reveal{opacity:0;transform:translateY(18px);transition:.7s cubic-bezier(.2,.7,.2,1);}
+  .reveal.in{opacity:1;transform:none;}
+
+  /* ---------- hero ---------- */
+  .hero{padding-top:3.2rem;}
+  .eyebrow{font-family:"IBM Plex Mono";font-size:.74rem;letter-spacing:.3em;color:var(--ink-faint);text-transform:uppercase;}
+  h1{
+    font-family:"Chakra Petch";font-weight:700;font-size:clamp(2.2rem,5.2vw,3.9rem);
+    line-height:1.02;letter-spacing:.005em;margin:.6rem 0 .4rem;
+  }
+  h1 .g{color:var(--go2);}
+  h1 .l{color:var(--lite3);}
+  h1 .x{color:var(--ink-faint);font-weight:500;margin:0 .15em;}
+  .sub{color:var(--ink-dim);max-width:70ch;font-size:1.05rem;}
+  .meta-row{display:flex;gap:1.4rem;flex-wrap:wrap;margin-top:1.4rem;font-family:"IBM Plex Mono";font-size:.74rem;color:var(--ink-faint);}
+  .meta-row span b{color:var(--ink-dim);font-weight:500;}
+
+  /* ---------- legend ---------- */
+  .legend{
+    display:flex;gap:.5rem;flex-wrap:wrap;margin:1.6rem 0 .4rem;
+  }
+  .chip{
+    font-family:"IBM Plex Mono";font-size:.72rem;letter-spacing:.02em;
+    padding:.34rem .7rem;border-radius:999px;border:1px solid var(--panel-edge);
+    display:inline-flex;align-items:center;gap:.45rem;color:var(--ink-dim);
+  }
+  .chip .sw{width:9px;height:9px;border-radius:2px;}
+  .sw.same{background:var(--same);} .sw.diff{background:var(--diff);}
+  .sw.risk{background:var(--risk);} .sw.go2{background:var(--go2);} .sw.lite3{background:var(--lite3);}
+
+  /* ---------- verdict cards ---------- */
+  .verdict-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-top:1.4rem;}
+  .vcard{
+    background:linear-gradient(160deg,var(--panel),var(--panel-2));
+    border:1px solid var(--panel-edge);border-radius:14px;padding:1.2rem 1.25rem;
+    position:relative;overflow:hidden;box-shadow:var(--shadow);
+  }
+  .vcard::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;}
+  .vcard.same::before{background:var(--same);} .vcard.diff::before{background:var(--diff);}
+  .vcard.risk::before{background:var(--risk);}
+  .vcard .k{font-family:"IBM Plex Mono";font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);}
+  .vcard .v{font-family:"Chakra Petch";font-weight:600;font-size:1.18rem;margin:.3rem 0 .35rem;}
+  .vcard.same .v{color:var(--same);} .vcard.diff .v{color:var(--diff);} .vcard.risk .v{color:var(--risk);}
+  .vcard p{margin:0;font-size:.86rem;color:var(--ink-dim);}
+
+  /* ---------- compare table ---------- */
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--panel-edge);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);
+  }
+  table{width:100%;border-collapse:collapse;font-size:.9rem;}
+  thead th{
+    background:var(--panel-2);text-align:left;font-family:"IBM Plex Mono";font-weight:600;
+    font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);
+    padding:.75rem 1rem;border-bottom:1px solid var(--panel-edge);
+  }
+  thead th.col-go2{color:var(--go2);} thead th.col-lite3{color:var(--lite3);}
+  tbody td{padding:.7rem 1rem;border-bottom:1px solid rgba(31,43,61,.55);vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(120,150,200,.035);}
+  td.field{font-weight:600;color:var(--ink);white-space:nowrap;}
+  td.field small{display:block;font-weight:400;color:var(--ink-faint);font-family:"IBM Plex Mono";font-size:.68rem;letter-spacing:.02em;margin-top:.15rem;}
+  td.go2,td.lite3{font-family:"IBM Plex Mono";font-size:.82rem;}
+  td.go2{color:#cfe9f6;} td.lite3{color:#f7e6bd;}
+  td.note{color:var(--ink-dim);font-size:.84rem;}
+  .val-big{font-size:.95rem;font-weight:600;}
+  .st{display:inline-block;font-family:"IBM Plex Mono";font-size:.64rem;font-weight:600;letter-spacing:.06em;padding:.16rem .5rem;border-radius:5px;text-transform:uppercase;}
+  .st.same{color:var(--same);background:var(--same-soft);}
+  .st.diff{color:var(--diff);background:var(--diff-soft);}
+  .st.risk{color:var(--risk);background:var(--risk-soft);}
+  .table-cap{font-family:"IBM Plex Mono";font-size:.72rem;color:var(--ink-faint);padding:.6rem 1rem;border-top:1px dashed var(--panel-edge);background:var(--panel-2);}
+
+  /* ---------- callout ---------- */
+  .callout{
+    border:1px solid var(--risk);border-radius:13px;padding:1.1rem 1.25rem;margin:1.1rem 0;
+    background:var(--risk-soft);position:relative;
+  }
+  .callout.note-diff{border-color:var(--diff);background:var(--diff-soft);}
+  .callout .hd{font-family:"Chakra Petch";font-weight:600;font-size:.98rem;display:flex;align-items:center;gap:.55rem;margin-bottom:.4rem;}
+  .callout.note-diff .hd{color:var(--diff);} .callout .hd{color:var(--risk);}
+  .callout .hd .ico{font-size:1.05rem;}
+  .callout p{margin:.3rem 0;font-size:.88rem;color:var(--ink-dim);}
+  .callout code{color:var(--ink);background:rgba(0,0,0,.35);padding:.05rem .35rem;border-radius:4px;font-size:.82em;}
+
+  /* reward columns */
+  .rw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-top:1rem;}
+  .rw{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--panel-edge);border-radius:13px;padding:1.1rem 1.2rem;}
+  .rw h4{margin:0 0 .7rem;font-family:"Chakra Petch";font-size:.95rem;display:flex;align-items:center;gap:.5rem;}
+  .rw.s h4{color:var(--same);} .rw.d h4{color:var(--diff);} .rw.g h4{color:var(--go2);} .rw.l h4{color:var(--lite3);}
+  .rw ul{margin:0;padding:0;list-style:none;}
+  .rw li{font-family:"IBM Plex Mono";font-size:.78rem;color:var(--ink-dim);padding:.28rem 0;border-bottom:1px dotted rgba(91,105,130,.22);display:flex;justify-content:space-between;gap:.6rem;}
+  .rw li:last-child{border-bottom:none;}
+  .rw li b{color:var(--ink);font-weight:500;}
+  .rw li .w{color:var(--ink-faint);white-space:nowrap;}
+
+  /* family timeline */
+  .fam{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem;margin-top:1rem;}
+  .fam .f{background:var(--panel-2);border:1px solid var(--panel-edge);border-left:3px solid var(--lite3);border-radius:10px;padding:.85rem 1rem;}
+  .fam .f .t{font-family:"IBM Plex Mono";font-size:.78rem;color:var(--lite3);font-weight:600;}
+  .fam .f p{margin:.3rem 0 0;font-size:.82rem;color:var(--ink-dim);}
+
+  footer{max-width:1240px;margin:0 auto;padding:2rem 1.4rem 4rem;border-top:1px solid var(--panel-edge);color:var(--ink-faint);font-size:.8rem;}
+  footer .files{font-family:"IBM Plex Mono";font-size:.74rem;margin-top:.6rem;line-height:1.9;}
+  footer .files span{color:var(--ink-dim);}
+  .hide-same tr[data-st="same"]{display:none;}
+  @media(max-width:680px){
+    nav.jump{display:none;}
+    h2{font-size:1.35rem;}
+    td.field{white-space:normal;}
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand"><b>GO2</b> × <i>LITE3</i> · HANDSTAND DIFF</div>
+    <nav class="jump" id="jump">
+      <a href="#verdict">结论</a>
+      <a href="#robot">机器人/PD</a>
+      <a href="#pose">姿态/几何</a>
+      <a href="#reward">奖励</a>
+      <a href="#traps">暗坑</a>
+      <a href="#env">观测/事件</a>
+      <a href="#family">rldeploy族</a>
+    </nav>
+    <div class="toggle" id="toggle"><span class="dot"></span>只看差异</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero" id="top">
+    <div class="eyebrow">MJLAB · 倒立行走任务对比 · verified against source</div>
+    <h1><span class="g">GO2</span><span class="x">/</span><span class="l">LITE3</span><br/>Handstand 差距在哪</h1>
+    <p class="sub">两个任务同属 mjlab 框架、同为"前掌倒立行走 + twist 速度跟踪"。基准奖励是一份忠实移植 —— 真正的差距集中在<b style="color:var(--ink)">机器人本体、action_scale、姿态几何</b>，以及几处<b style="color:var(--risk)">同名异函数的移植暗坑</b>。</p>
+    <div class="meta-row">
+      <span><b>源</b> go2_handstand · lite3_handstand · *_constants.py</span>
+      <span><b>核验</b> 多智能体审计 ✓ confirmed</span>
+      <span><b>日期</b> 2026-06-02</span>
+    </div>
+    <div class="legend">
+      <span class="chip"><span class="sw go2"></span>GO2 (Unitree Go2)</span>
+      <span class="chip"><span class="sw lite3"></span>LITE3 (DeepRobotics)</span>
+      <span class="chip"><span class="sw same"></span>SAME 相同</span>
+      <span class="chip"><span class="sw diff"></span>DIFF 有差异</span>
+      <span class="chip"><span class="sw risk"></span>TRAP 暗坑/疑似 bug</span>
+    </div>
+  </section>
+
+  <!-- VERDICT -->
+  <section id="verdict">
+    <div class="sec-tag">Executive summary</div>
+    <h2><span class="num">00</span>一句话结论</h2>
+    <p class="lead"><b style="color:var(--ink)">PD 增益 kp/kd 其实完全相同(都 40 / 1.0)</b> —— 这通常是大家以为不同的地方，反而是"假差异"。真正的差距按重要性排序如下。</p>
+    <div class="verdict-grid">
+      <div class="vcard diff"><div class="k">#1 本体控制</div><div class="v">action_scale + 力矩</div><p>lite3 把外摆 HipX 缩到 <code>0.125</code>(go2 全 0.25)→ 外摆力矩权威只有 go2 的一半；effort 也是统一 30 vs go2 23.7/35.55。</p></div>
+      <div class="vcard diff"><div class="k">#2 姿态几何</div><div class="v">符号翻转 + 重推导</div><p>lite3 三关节轴全反号，关节范围不同，desire 姿态必须重推导(HipY 上限仅 +0.314)，起始更矮(0.30 vs 0.42)。</p></div>
+      <div class="vcard risk"><div class="k">#3 奖励暗坑</div><div class="v">3 处同名异函数</div><p><code>base_height</code> / <code>lin_vel_z</code> / <code>ang_vel_xy</code> 权重相同但函数语义不同，甚至相反。只看权重表会漏掉。</p></div>
+      <div class="vcard diff"><div class="k">#4 观测空间</div><div class="v">lite3 去掉 base_lin_vel</div><p>真机不可测，lite3 actor 删掉线速度 → 两者策略观测不兼容，go2 策略无法直接搬到 lite3。</p></div>
+      <div class="vcard risk"><div class="k">#5 扰动机制</div><div class="v">力推 vs 速度推</div><p>go2 改用力推(因速度推会秒杀环境)；lite3 base 仍用速度推 → 排查早期不稳定的头号嫌疑。</p></div>
+      <div class="vcard diff"><div class="k">#6 衍生族</div><div class="v">rldeploy ×25</div><p>lite3 独有的一整套部署对齐 + Stride-V1…V15 调参族；go2 完全没有对应。</p></div>
+    </div>
+  </section>
+
+  <!-- ROBOT / PD -->
+  <section id="robot">
+    <div class="sec-tag">Robot &amp; actuators</div>
+    <h2><span class="num">01</span>机器人本体 / PD 增益</h2>
+    <p class="lead">两者 handstand 都把全 12 关节硬编码成 <b style="color:var(--ink)">kp=40, kd=1.0</b>(<code>BuiltinPositionActuatorCfg</code>，绕开各自的行走默认公式)。差异在 action_scale、effort、armature。</p>
+    <div class="panel reveal">
+      <table id="t-robot">
+        <thead><tr><th>参数</th><th class="col-go2">GO2 handstand</th><th class="col-lite3">LITE3 handstand</th><th>状态</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr data-st="same"><td class="field">kp (刚度)</td><td class="go2 val-big">40.0 ×12</td><td class="lite3 val-big">40.0 ×12</td><td><span class="st same">same</span></td><td class="note">均匀硬编码，均匹配 IsaacGym</td></tr>
+          <tr data-st="same"><td class="field">kd (阻尼)</td><td class="go2 val-big">1.0 ×12</td><td class="lite3 val-big">1.0 ×12</td><td><span class="st same">same</span></td><td class="note">相同</td></tr>
+          <tr data-st="diff"><td class="field">action_scale</td><td class="go2">统一 0.25</td><td class="lite3">HipX <b style="color:var(--lite3)">0.125</b> / HipY 0.25 / Knee 0.25</td><td><span class="st diff">diff</span></td><td class="note">lite3 把外摆减半(外摆权威更高)</td></tr>
+          <tr data-st="diff"><td class="field">力矩权威<small>kp·scale</small></td><td class="go2">全部 10 Nm/单位</td><td class="lite3">HipX <b style="color:var(--risk)">5</b> / 其余 10</td><td><span class="st diff">diff</span></td><td class="note">lite3 外摆只有 go2 的一半</td></tr>
+          <tr data-st="diff"><td class="field">effort_limit</td><td class="go2">髋 23.7 / calf 35.55</td><td class="lite3">统一 30.0</td><td><span class="st diff">diff</span></td><td class="note">lite3 髋更强、膝更弱</td></tr>
+          <tr data-st="diff"><td class="field">armature</td><td class="go2">始终保留</td><td class="lite3">base 保留 / <b style="color:var(--risk)">rldeploy 丢弃</b></td><td><span class="st diff">diff</span></td><td class="note">rldeploy 对齐部署 XML(无反射惯量)</td></tr>
+          <tr data-st="same"><td class="field">执行器类型</td><td class="go2">BuiltinPositionActuator</td><td class="lite3">BuiltinPositionActuator</td><td><span class="st same">same</span></td><td class="note">都非 Implicit/DelayedPD</td></tr>
+          <tr data-st="same"><td class="field">动作机制</td><td class="go2">default_pose + a·scale</td><td class="lite3">default_pose + a·scale</td><td><span class="st same">same</span></td><td class="note">绝对式，use_default_offset=True</td></tr>
+          <tr data-st="diff"><td class="field">行走基准 kp<small>(对比背景)</small></td><td class="go2">髋 ~15.9 / calf ~35.8</td><td class="lite3">统一 30</td><td><span class="st diff">diff</span></td><td class="note">go2 行走用自然频率公式;两者 handstand 都上调到 40</td></tr>
+          <tr data-st="diff"><td class="field">质量</td><td class="go2">trunk 6.92 kg</td><td class="lite3">总 ~11.94 kg / trunk 5.61</td><td><span class="st diff">diff</span></td><td class="note">lite3 更轻的机器人</td></tr>
+        </tbody>
+      </table>
+      <div class="table-cap">go2_constants.py · lite3_constants.py — 全部数值经独立重算 + 对抗核验</div>
+    </div>
+  </section>
+
+  <!-- POSE -->
+  <section id="pose">
+    <div class="sec-tag">Kinematics &amp; pose</div>
+    <h2><span class="num">02</span>姿态 / 几何 / 命名</h2>
+    <p class="lead">lite3 不是 go2 的简单换皮：<b style="color:var(--ink)">三个关节轴全部反号</b>，关节范围不同，所以姿态无法直接符号翻转，desire 被迫重新推导。</p>
+    <div class="panel reveal">
+      <table id="t-pose">
+        <thead><tr><th>项目</th><th class="col-go2">GO2</th><th class="col-lite3">LITE3</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr data-st="diff"><td class="field">关节命名</td><td class="go2">[FR/FL/RL/RR]_[hip/thigh/calf]</td><td class="lite3">[FL/FR/HL/HR]_[HipX/HipY/Knee]</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">关节轴向</td><td class="go2">+x / +y / +y</td><td class="lite3">−x / −y / −y (全反号)</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">起始高度 z</td><td class="go2">0.42</td><td class="lite3">0.30 (更矮)</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">膝/calf 范围</td><td class="go2">[−2.72, −0.84] 全负</td><td class="lite3">[0.524, 2.792] 全正</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="risk"><td class="field">HipY/thigh 上限</td><td class="go2">thigh 可到 +0.8/+1.0</td><td class="lite3">HipY 上限仅 <b style="color:var(--risk)">+0.314</b></td><td><span class="st risk">trap</span></td></tr>
+          <tr data-st="diff"><td class="field">desire 前腿(支撑)</td><td class="go2">(0, −0.7, −1.75)</td><td class="lite3">(0, 0.283, 2.0) 重推导</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">desire 后腿(摆动)</td><td class="go2">(0, 0.8, −1.5)</td><td class="lite3">(0, −0.8, 1.6)</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">base_height 目标</td><td class="go2">0.47</td><td class="lite3">0.39</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">后脚高度目标</td><td class="go2">0.67</td><td class="lite3">0.56</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">足顺序</td><td class="go2">0=FR 1=FL 2=RR 3=RL</td><td class="lite3">0=FL 1=FR 2=HL 3=HR</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="same"><td class="field">支撑/摆动划分</td><td class="go2">前(0,1)支撑 / 后(2,3)摆动</td><td class="lite3">前(0,1)支撑 / 后(2,3)摆动</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="diff"><td class="field">碰撞几何</td><td class="go2">trunk+head; calf×2 圆柱/腿</td><td class="lite3">TORSO only(无 head); SHANK×1/腿</td><td><span class="st diff">diff</span></td></tr>
+        </tbody>
+      </table>
+      <div class="table-cap">为什么不能符号翻转: go2 前腿 thigh=−0.7 翻到 lite3 应是 HipY=+0.7，但超出 lite3 +0.314 上限 → 取贴上限的 0.283</div>
+    </div>
+  </section>
+
+  <!-- REWARD -->
+  <section id="reward">
+    <div class="sec-tag">Reward graph</div>
+    <h2><span class="num">03</span>奖励对比</h2>
+    <p class="lead">go2 基准 <b style="color:var(--go2)">24 项</b>，lite3 基准 <b style="color:var(--lite3)">23 项</b>，23 个 key 重合 —— lite3 基准奖励是 go2 的<b style="color:var(--ink)">忠实移植</b>。门控 <code>_handstand_quality</code> 两边都被钉成 2.0(恒开)。</p>
+    <div class="rw-grid">
+      <div class="rw s reveal">
+        <h4>● 完全相同 (16 项)</h4>
+        <ul>
+          <li><b>alive</b><span class="w">+1.0</span></li>
+          <li><b>handstand_orientation</b><span class="w">−1.0</span></li>
+          <li><b>handstand_feet_on_air</b><span class="w">+0.4</span></li>
+          <li><b>tracking_lin_vel</b><span class="w">+2.5</span></li>
+          <li><b>tracking_ang_vel</b><span class="w">+2.5</span></li>
+          <li><b>tracking_lin/ang_vel_zero</b><span class="w">−0.2</span></li>
+          <li><b>symmetric_joints</b><span class="w">−0.1</span></li>
+          <li><b>contact</b> 前脚<span class="w">+0.3</span></li>
+          <li><b>feet_air_time</b> 前脚<span class="w">+2.0</span></li>
+          <li><b>default_pos_reward</b><span class="w">+1.0</span></li>
+          <li><b>action_rate_l2</b><span class="w">−0.05</span></li>
+          <li><b>dof_acc</b><span class="w">−2.5e-4</span></li>
+          <li><b>base/thigh/calf_collision</b><span class="w">−2/−1/−2</span></li>
+        </ul>
+      </div>
+      <div class="rw d reveal">
+        <h4>◐ 同权重·不同参数</h4>
+        <ul>
+          <li><b>handstand_feet_height_exp</b><span class="w">+5.0</span></li>
+          <li style="color:var(--ink-faint)">target 0.67 → 0.56</li>
+          <li><b>feet_clearance</b><span class="w">+0.4</span></li>
+          <li style="color:var(--risk)">脚索引 (2,3)后→(0,1)前!</li>
+          <li><b>default_pos</b><span class="w">−1.0</span></li>
+          <li style="color:var(--ink-faint)">desire 向量不同(见 §02)</li>
+          <li><b>default_hip_pos</b><span class="w">−0.5</span></li>
+          <li style="color:var(--ink-faint)">.*hip → .*HipX</li>
+        </ul>
+      </div>
+      <div class="rw g reveal">
+        <h4>▲ 仅 GO2 有</h4>
+        <ul>
+          <li><b>ang_xz_penalty</b><span class="w">−0.5</span></li>
+          <li style="color:var(--ink-faint)">惩罚 roll/yaw 角速度</li>
+          <li style="color:var(--ink-dim);border:none;padding-top:.6rem">→ lite3 姿态正则更弱，<br/>只剩 orientation + ang_vel</li>
+        </ul>
+        <h4 style="margin-top:1rem">▼ 仅 LITE3-robust 有</h4>
+        <ul>
+          <li><b>zero_stance_contact</b><span class="w">+0.8</span></li>
+          <li><b>zero_joint_vel</b><span class="w">−0.02</span></li>
+          <li style="color:var(--ink-faint)">零指令站立保持(go2 无)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRAPS -->
+  <section id="traps">
+    <div class="sec-tag">Port artifacts</div>
+    <h2><span class="num">04</span>移植暗坑 (同名 · 同权重 · 函数却不同)</h2>
+    <p class="lead">这是<b style="color:var(--risk)">最容易被漏掉</b>的差异：reward 字典 key 和权重都一样，但底层函数语义不同 —— 光对比权重表完全看不出来。</p>
+
+    <div class="callout">
+      <div class="hd"><span class="ico">⚠</span>base_height (+1.5 两边相同)</div>
+      <p><b style="color:var(--go2)">GO2</b>: <code>base_height = square(z − 0.47)</code> —— 平方<b>惩罚</b>函数配了<b style="color:var(--risk)">正权重</b>，实际在<b>奖励偏离</b> 0.47(疑似 IsaacGym 移植 bug)。</p>
+      <p><b style="color:var(--lite3)">LITE3</b>: <code>handstand_base_height = exp(−|z−0.39|·5)</code> —— 正确的有界跟踪奖励。lite3 静默修正了这个坑。</p>
+    </div>
+
+    <div class="callout">
+      <div class="hd"><span class="ico">⚠</span>lin_vel_z (+0.2 两边相同) · 目标相反</div>
+      <p><b style="color:var(--go2)">GO2</b>: <code>lin_vel_x_penalty = square(vel_x)</code> —— <b>奖励</b>体 x 速度(鼓励运动)。</p>
+      <p><b style="color:var(--lite3)">LITE3</b>: <code>handstand_lin_vel_z = exp(−|vel_x|·10)</code> —— <b>抑制</b>运动。同 key 同权重，objective 完全相反。</p>
+    </div>
+
+    <div class="callout">
+      <div class="hd"><span class="ico">⚠</span>ang_vel_xy (+0.2 两边相同) · 可能与指令冲突</div>
+      <p><b style="color:var(--go2)">GO2</b>: 用 <code>ang_vel_b[:2]</code> = roll, pitch。</p>
+      <p><b style="color:var(--lite3)">LITE3</b>: 用 <code>ang_vel_b[1:3]</code> = pitch, <b style="color:var(--risk)">yaw</b> —— 正则了偏航轴，而偏航正是 <code>ang_z</code> 指令要跟踪的轴。<b>疑似 bug：可能与偏航跟踪打架</b>，建议核实。</p>
+    </div>
+
+    <div class="callout note-diff">
+      <div class="hd" style="color:var(--diff)"><span class="ico">◆</span>feet_clearance · 行为级分叉(非笔误)</div>
+      <p>正弦抬腿奖励(+0.4)在 <b style="color:var(--go2)">go2</b> 作用于<b>后摆动脚 (2,3)</b>；在 <b style="color:var(--lite3)">lite3</b> 改作用于<b>前支撑脚 (0,1)</b> —— lite3 把它当成支撑脚的踏步节律塑形。这是设计选择，但确实是行为分叉。</p>
+    </div>
+  </section>
+
+  <!-- ENV -->
+  <section id="env">
+    <div class="sec-tag">Obs · events · sim</div>
+    <h2><span class="num">05</span>观测 / 域随机化 / 仿真</h2>
+    <div class="panel reveal">
+      <table id="t-env">
+        <thead><tr><th>项目</th><th class="col-go2">GO2</th><th class="col-lite3">LITE3</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr data-st="risk"><td class="field">actor 观测</td><td class="go2">含 base_lin_vel</td><td class="lite3"><b style="color:var(--risk)">删除 base_lin_vel</b>(真机不可测)</td><td><span class="st risk">trap</span></td></tr>
+          <tr data-st="same"><td class="field">critic 观测</td><td class="go2">+特权 lin_vel + foot_contact</td><td class="lite3">+特权 lin_vel + foot_contact</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="same"><td class="field">obs 历史</td><td class="go2">history=10</td><td class="lite3">history=10</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="same"><td class="field">指令 twist</td><td class="go2">lin_x±0.4, ang_z±0.4, 5s</td><td class="lite3">lin_x±0.4, ang_z±0.4, 5s</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="risk"><td class="field">push 扰动</td><td class="go2">力推 ±20N / ±8Nm</td><td class="lite3"><b style="color:var(--risk)">速度推</b> x/y±0.3…</td><td><span class="st risk">trap</span></td></tr>
+          <tr data-st="diff"><td class="field">足摩擦随机化</td><td class="go2">1 个事件</td><td class="lite3">3 个(slide/spin/roll)</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">base_com 随机化</td><td class="go2">整机</td><td class="lite3">仅 TORSO 逐轴</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="diff"><td class="field">encoder_bias</td><td class="go2">无</td><td class="lite3">有(±0.01)</td><td><span class="st diff">diff</span></td></tr>
+          <tr data-st="same"><td class="field">base_mass 随机化</td><td class="go2">+[−1,2] kg</td><td class="lite3">+[−1,2] kg</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="same"><td class="field">终止条件</td><td class="go2">time_out 20s + 躯干触地</td><td class="lite3">time_out 20s + 躯干触地</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="same"><td class="field">仿真参数</td><td class="go2">dec 4, dt 0.005, 50Hz, plane</td><td class="lite3">dec 4, dt 0.005, 50Hz, plane</td><td><span class="st same">same</span></td></tr>
+          <tr data-st="same"><td class="field">num_envs / episode</td><td class="go2">4096 / 20s</td><td class="lite3">4096 / 20s</td><td><span class="st same">same</span></td></tr>
+        </tbody>
+      </table>
+      <div class="table-cap">push 机制是排查 lite3 早期不稳定的头号嫌疑 — go2 注释明确写"速度推太强会秒杀环境才改成力推"</div>
+    </div>
+  </section>
+
+  <!-- FAMILY -->
+  <section id="family">
+    <div class="sec-tag">Lite3-only lineage</div>
+    <h2><span class="num">06</span>rldeploy 衍生族 (lite3 独有，go2 无)</h2>
+    <p class="lead">lite3 在基准之上长出一整套对齐 C++ <code>rl_deploy_handstand</code> 部署契约的派生族，共 <b style="color:var(--lite3)">25+ 个注册变体</b>。base rldeploy 丢 armature、关自碰撞、改 timestep 0.001/decimation 20，观测锁成 45×10=450 维，奖励改"静态优先"。</p>
+    <div class="fam">
+      <div class="f reveal"><div class="t">DR</div><p>加 sim2real 域随机化(pd/motor/inertia/encoder)</p></div>
+      <div class="f reveal"><div class="t">robotlab</div><p>换 RobotLab 的 L2/exp-with-floor 奖励族 + 课程</p></div>
+      <div class="f reveal"><div class="t">low_default_pose</div><p>削弱姿态拉力，避免主导</p></div>
+      <div class="f reveal"><div class="t">zero_stance / quiet_*</div><p>零指令安静站立</p></div>
+      <div class="f reveal"><div class="t">no_hop</div><p>惩罚双前脚同时离地，杀跳跃 exploit</p></div>
+      <div class="f reveal"><div class="t">big_step</div><p>重启前脚 air_time，追大步</p></div>
+      <div class="f reveal"><div class="t">Stride V1 → V15</div><p>逐步放开迈步:加单脚支撑/恢复抬腿/放开 HipY/限到后腿…(你的活跃工作区)</p></div>
+      <div class="f reveal"><div class="t">no_default_pose</div><p>完全关闭期望姿态塑形</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div>GO2 × LITE3 Handstand 对比 · 数据来自 mjlab 仓库源码，经多智能体审计 + 对抗核验(confirmed，无修正)。</div>
+  <div class="files">
+    <span>go2_mjlab/config/go2_handstand/env_cfgs.py</span> · go2_handstand 奖励/环境<br/>
+    <span>go2_mjlab/config/lite3_handstand/env_cfgs.py</span> · lite3 基准 + robust 变体<br/>
+    <span>go2_mjlab/config/lite3_handstand_rldeploy/env_cfgs.py</span> · rldeploy 族 (25+ 变体)<br/>
+    <span>go2_mjlab/robots/{go2,lite3}_constants.py</span> · PD 增益 / action_scale / 姿态<br/>
+    <span>go2_mjlab/mdp/rewards.py</span> · 奖励函数实现
+  </div>
+</footer>
+
+<script>
+  // scrollspy
+  const links=[...document.querySelectorAll('nav.jump a')];
+  const secs=links.map(a=>document.querySelector(a.getAttribute('href')));
+  const spy=new IntersectionObserver((es)=>{
+    es.forEach(e=>{
+      if(e.isIntersecting){
+        const id='#'+e.target.id;
+        links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')===id));
+      }
+    });
+  },{rootMargin:'-45% 0px -50% 0px'});
+  secs.forEach(s=>s&&spy.observe(s));
+
+  // reveal on scroll
+  const rev=new IntersectionObserver((es)=>{
+    es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');rev.unobserve(e.target);}});
+  },{rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.reveal').forEach(el=>rev.observe(el));
+
+  // "only diff" toggle
+  const tog=document.getElementById('toggle');
+  tog.addEventListener('click',()=>{
+    tog.classList.toggle('on');
+    document.querySelectorAll('table').forEach(t=>t.classList.toggle('hide-same'));
+  });
+</script>
+</body>
+</html>

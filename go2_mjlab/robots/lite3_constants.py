@@ -181,6 +181,24 @@ HANDSTAND_INIT_STATE = EntityCfg.InitialStateCfg(
     joint_vel={".*": 0.0},
 )
 
+# Footstand init = NORMAL four-paw stand with the handstand_gym
+# `Lite3_stand` default joint angles (front HipY -0.8, hind HipY -1.0,
+# Knee 1.5).  The source URDF and this MJCF share the same (-1,0,0)
+# HipX axis, so the source values transfer directly (FL/HL = -0.1,
+# FR/HR = +0.1).  Spawn z is 0.30 (not the source's 0.22, which relies
+# on IsaacGym auto-depenetration); reset settles the robot onto its feet.
+FOOTSTAND_INIT_STATE = EntityCfg.InitialStateCfg(
+    pos=(0.0, 0.0, 0.30),
+    joint_pos={
+        ".*L_HipX_joint": -0.1,
+        ".*R_HipX_joint": 0.1,
+        "F[LR]_HipY_joint": -0.8,
+        "H[LR]_HipY_joint": -1.0,
+        ".*Knee_joint": 1.5,
+    },
+    joint_vel={".*": 0.0},
+)
+
 ##
 # Collision config.
 ##
@@ -219,6 +237,23 @@ RLDEPLOY_COLLISION = CollisionCfg(
     priority=0,
     friction=(1.0, 0.01, 0.01),
     solref=(0.005, 1),
+)
+
+# Softened-contact variant for the undulating-terrain finetune.  Same as
+# RLDEPLOY_COLLISION but the contact time-constant is relaxed 0.005 s -> 0.02 s
+# (and solimp made softer).  The stiff 5 ms contact explodes to NaN when the
+# flat-trained handstand tumbles onto a heightfield slope or spawns slightly
+# penetrating a wave crest; a 20 ms contact absorbs penetration smoothly so
+# the episode just terminates instead of NaN-ing the whole batch.
+RLDEPLOY_TERRAIN_COLLISION = CollisionCfg(
+    geom_names_expr=(".*_collision",),
+    contype=0,
+    conaffinity=1,
+    condim=3,
+    priority=0,
+    friction=(1.0, 0.01, 0.01),
+    solref=(0.02, 1),
+    solimp=(0.9, 0.95, 0.01),
 )
 
 ##
@@ -280,6 +315,27 @@ def get_lite3_rldeploy_handstand_robot_cfg() -> EntityCfg:
         collisions=(RLDEPLOY_COLLISION,),
         spec_fn=get_spec,
         articulation=LITE3_RLDEPLOY_HANDSTAND_ARTICULATION,
+    )
+
+
+def get_lite3_terrain_handstand_robot_cfg() -> EntityCfg:
+    """RLDeploy handstand robot with softened contact for undulating terrain."""
+    return EntityCfg(
+        init_state=HANDSTAND_INIT_STATE,
+        collisions=(RLDEPLOY_TERRAIN_COLLISION,),
+        spec_fn=get_spec,
+        articulation=LITE3_RLDEPLOY_HANDSTAND_ARTICULATION,
+    )
+
+
+def get_lite3_footstand_robot_cfg() -> EntityCfg:
+    """Lite3 for rear-leg footstand: Kp=40/Kd=1 PD (matching handstand_gym
+    `Lite3_stand` control config) with the Lite3_stand init pose."""
+    return EntityCfg(
+        init_state=FOOTSTAND_INIT_STATE,
+        collisions=(FULL_COLLISION,),
+        spec_fn=get_spec,
+        articulation=LITE3_HANDSTAND_ARTICULATION,
     )
 
 

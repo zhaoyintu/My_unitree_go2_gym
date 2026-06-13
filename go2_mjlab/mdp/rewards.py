@@ -1211,7 +1211,25 @@ class handstand_feet_air_time:
         command_name: str | None = None,
         moving_threshold: float = 0.1,
         target_height: float = 0.08,
+        air_time_offset: float = 0.4,
+        air_time_cap: float | None = None,
+        clamp_positive: bool = False,
     ) -> torch.Tensor:
+        """Reward (air_time - offset) at the swing→stance touchdown.
+
+        Default (``clamp_positive=False``, offset 0.4, no cap) reproduces the
+        IsaacGym form ``sum((air_time - 0.4) * first_contact)`` — an UNCLAMPED
+        value that PENALIZES any swing shorter than ``air_time_offset``.
+        That barrier is a confirmed stride blocker (the term runs net-negative
+        the whole run, punishing the short lifts the policy actually makes).
+
+        Set ``clamp_positive=True`` to use a monotone-positive ramp that pays
+        from ``air_time_offset`` upward and never goes negative:
+            sum(clamp(min(air_time, cap) - offset, min=0) * first_contact)
+        Lower ``air_time_offset`` toward an achievable swing (~0.15 s) so it
+        pays before a full 0.4 s, and set ``air_time_cap`` (e.g. 0.6 s) so a
+        single perpetual one-leg hop cannot farm unbounded air time.
+        """
         contact_sensor: ContactSensor = env.scene[sensor_name]
         contact = contact_sensor.data.found > 0  # [B, 4]
         selected = contact[:, list(foot_indices)]
@@ -1219,7 +1237,13 @@ class handstand_feet_air_time:
         contact_filt = torch.logical_or(selected, self.last_contacts)
         first_contact = (self.air_time > 0.0).float() * contact_filt.float()
         self.air_time += env.step_dt
-        rew = torch.sum((self.air_time - 0.4) * first_contact, dim=1)
+        scored_air = self.air_time
+        if air_time_cap is not None:
+            scored_air = torch.clamp(scored_air, max=air_time_cap)
+        delta = scored_air - air_time_offset
+        if clamp_positive:
+            delta = torch.clamp(delta, min=0.0)
+        rew = torch.sum(delta * first_contact, dim=1)
         self.air_time = self.air_time * (~contact_filt).float()
 
         self.last_contacts = selected
@@ -1270,6 +1294,48 @@ def handstand_feet_clearance(
 
     rew = torch.exp(-torch.abs(selected_z[:, 0] - target) * sharpness) * swing_mask_0
     rew += torch.exp(-torch.abs(selected_z[:, 1] - target) * sharpness) * swing_mask_1
+
+    quality = _handstand_quality(env, target_height)
+    moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+    return rew * (quality > 0.70).float() * moving_mask
+
+
+def handstand_swing_foot_height_linear(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    asset_cfg: SceneEntityCfg,
+    foot_indices: tuple[int, ...],
+    foot_site_names: tuple[str, ...],
+    cap_height: float = 0.25,
+    command_name: str | None = None,
+    moving_threshold: float = 0.1,
+    target_height: float = 0.08,
+) -> torch.Tensor:
+    """Linear-with-cap swing-foot height reward (no sinusoidal target).
+
+    For each foot in ``foot_indices``, when the foot is NOT in ground
+    contact, contribute ``clamp(z_world / cap_height, 0, 1)`` to the
+    reward. Foot-on-ground frames contribute 0. The summed reward is
+    gated by handstand quality and a moving-command mask.
+
+    Unlike ``handstand_feet_clearance`` this term has no sinusoidal target
+    or sharpness — it directly rewards lifting feet to ``cap_height``.
+    The reward goes to 0 when the foot is on the ground and grows linearly
+    with height up to the cap, so the policy cannot satisfy it without
+    actually lifting the foot.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+
+    site_ids, _ = asset.find_sites(foot_site_names)
+    feet_z = asset.data.site_pos_w[:, site_ids, 2]  # [B, 4]
+    selected_z = feet_z[:, list(foot_indices)]  # [B, n]
+
+    contact = contact_sensor.data.found > 0
+    in_air = (~contact[:, list(foot_indices)]).float()
+
+    height_score = torch.clamp(selected_z / cap_height, min=0.0, max=1.0)
+    rew = (height_score * in_air).sum(dim=1)
 
     quality = _handstand_quality(env, target_height)
     moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
@@ -1342,6 +1408,24 @@ def handstand_torques(
     return torch.sum(torch.abs(force), dim=1)
 
 
+def energy(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Penalize mechanical power: sum_i |qvel_i| * |tau_i|.
+
+    Matches mujoco_playground Go1Handstand `_cost_energy` — the stage-2
+    finetune term that prices jumping (peak torque x peak joint speed)
+    out of posture tasks.  `joint_vel` and `qfrc_actuator` share the
+    entity's joint-DoF indexing, so the elementwise product pairs each
+    joint's velocity with its own actuation torque.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    qfrc = asset.data.qfrc_actuator[:, asset_cfg.joint_ids]
+    return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=1)
+
+
 def dof_pos_limits(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
@@ -1354,3 +1438,122 @@ def dof_pos_limits(
     out_of_limits = -torch.clamp(joint_pos - lower, max=0.0)
     out_of_limits += torch.clamp(joint_pos - upper, min=0.0)
     return torch.sum(out_of_limits, dim=1)
+
+
+# ---------------------------------------------------------------------------
+# Footstand (rear-leg standing) reward functions
+# ---------------------------------------------------------------------------
+# Ported from handstand_gym `Lite3_stand` (IsaacGym).  Despite the source
+# class being named "handstand", the task is a FOOTSTAND: the robot rears
+# UP on its hind legs (nose up), so body +x = world +z and body +z =
+# world -x.  Frame mapping consequences:
+#   * projected gravity target = (-1, 0, 0)  (vs (+1,0,0) head-down)
+#   * world forward velocity   = -lin_vel_b[2]
+#   * world yaw rate           = +ang_vel_b[0]  (vs -ang_vel_b[0] head-down)
+
+
+def _footstand_height_quality(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    sharpness: float = 10.0,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    asset: Entity = env.scene[asset_cfg.name]
+    base_z = asset.data.root_link_pos_w[:, 2]
+    return torch.exp(-torch.abs(base_z - target_height) * sharpness)
+
+
+def footstand_base_height_exp(
+    env: ManagerBasedRlEnv,
+    target_height: float,
+    sharpness: float = 10.0,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Reward trunk world-z near `target_height`.
+
+    Matches IsaacGym Lite3_stand `_reward_base_height`:
+    exp(-|z - target| * 10).
+    """
+    return _footstand_height_quality(env, target_height, sharpness, asset_cfg)
+
+
+def footstand_tracking_lin_vel(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    target_height: float,
+    tracking_sigma: float = 0.25,
+    gate_threshold: float = 0.8,
+    height_sharpness: float = 10.0,
+) -> torch.Tensor:
+    """Linear velocity tracking while standing on the rear legs (nose up).
+
+    Matches IsaacGym Lite3_stand `_reward_tracking_lin_vel`:
+        x_error = (cmd_x + lin_vel_b[2])^2   # world fwd = -v_body_z
+        y_error = (cmd_y - lin_vel_b[1])^2
+        exp(-(x+y)/sigma) gated on the base-height reward > 0.8.
+    The source gated on the BATCH MEAN of the height reward (acting as a
+    global curriculum switch); here the gate is per-env, same intent.
+    """
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    lin_vel_b = asset.data.root_link_lin_vel_b
+    x_error = torch.square(command[:, 0] + lin_vel_b[:, 2])
+    y_error = torch.square(command[:, 1] - lin_vel_b[:, 1])
+    quality = _footstand_height_quality(env, target_height, height_sharpness)
+    return torch.exp(-(x_error + y_error) / tracking_sigma) * (quality > gate_threshold).float()
+
+
+def footstand_tracking_ang_vel(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    target_height: float,
+    tracking_sigma: float = 0.25,
+    gate_threshold: float = 0.8,
+    height_sharpness: float = 10.0,
+) -> torch.Tensor:
+    """Yaw-rate tracking while standing on the rear legs (nose up).
+
+    Matches IsaacGym Lite3_stand `_reward_tracking_ang_vel`:
+        ang_error = (cmd_yaw - ang_vel_b[0])^2   # world yaw = +w_body_x
+    with the same base-height gate as the linear term.
+    """
+    asset: Entity = env.scene["robot"]
+    command = env.command_manager.get_command(command_name)
+    ang_vel_b = asset.data.root_link_ang_vel_b
+    ang_vel_error = torch.square(command[:, 2] - ang_vel_b[:, 0])
+    quality = _footstand_height_quality(env, target_height, height_sharpness)
+    return torch.exp(-ang_vel_error / tracking_sigma) * (quality > gate_threshold).float()
+
+
+def handstand_contact_schedule(
+    env: "ManagerBasedRlEnv",
+    sensor_name: str = "feet_ground_contact",
+    foot_indices: tuple[int, int] = (0, 1),
+    cycle_time: float = 1.0,
+    command_name: str | None = None,
+    moving_threshold: float = 0.1,
+    target_height: float = 0.08,
+) -> torch.Tensor:
+    """Phase-locked front-foot contact schedule — the gait CADENCE lock.
+
+    Uses the SAME phase as ``gait_clock``/``handstand_feet_clearance``
+    (``phase = (ep_len*dt) % cycle_time / cycle_time``).  Foot 0 should be in
+    ground CONTACT during the first half of the cycle (phase < 0.5) and
+    AIRBORNE during the second half; foot 1 is anti-phase.  The reward is the
+    fraction of the two front feet whose actual contact state matches this
+    desired schedule, so the policy is rewarded for stepping AT the clock
+    cadence and penalised for stepping faster — it cannot farm reward with a
+    high-frequency shuffle.  Because the clock is in the observation
+    (PhaseClock), this schedule is followable.  Gated by handstand quality and
+    (optionally) a moving-command mask.
+    """
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    in_contact = (contact_sensor.data.found[:, list(foot_indices)] > 0).float()  # [B,2]
+    phase = (env.episode_length_buf * env.step_dt) % cycle_time / cycle_time
+    des0 = (phase < 0.5).float()   # foot 0 stance in first half
+    des1 = (phase >= 0.5).float()  # foot 1 stance in second half (anti-phase)
+    desired = torch.stack((des0, des1), dim=1)  # [B,2]
+    match = (in_contact == desired).float().mean(dim=1)  # [B] in [0,1]
+    quality = _handstand_quality(env, target_height)
+    moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
+    return match * (quality > 0.70).float() * moving_mask

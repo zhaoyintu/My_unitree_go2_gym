@@ -22,6 +22,7 @@ from mjlab.sensor import (
     RingPatternCfg,
 )
 from go2_mjlab import mdp as go2_mdp
+from go2_mjlab.mdp import unilab_rewards as ur
 from mjlab.tasks.velocity import mdp
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.tasks.velocity.velocity_env_cfg import make_velocity_env_cfg
@@ -322,5 +323,105 @@ def unitree_go2_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         cfg.curriculum = {}
         twist_cmd.ranges.lin_vel_x = (-1.5, 2.0)
         twist_cmd.ranges.ang_vel_z = (-0.7, 0.7)
+
+    return cfg
+
+
+def unitree_go2_unified_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+    """Go2 flat velocity env with reward ported 1:1 from UniLab go2_joystick_flat.
+
+    Reuses the trot scaffold (Go2 robot, feet sensors, flat terrain, DR,
+    terminations, gait_clock obs) but REPLACES the reward block with UniLab's
+    exact 9 terms (formula + weight + sigma) and sets action_scale=0.4 +
+    UniLab command ranges. kp/kd (35/0.5), num_envs (1024), and max_iterations
+    are applied via CLI overrides at launch.
+    """
+    cfg = unitree_go2_flat_env_cfg(play)
+
+    foot_site_names = ("FR", "FL", "RR", "RL")
+
+    # Action scale -> UniLab 0.4
+    joint_pos_action = cfg.actions["joint_pos"]
+    assert isinstance(joint_pos_action, JointPositionActionCfg)
+    joint_pos_action.scale = 0.4
+
+    # Reward: UniLab go2_joystick_flat exact 9 terms.
+    cfg.rewards = {
+        "tracking_lin_vel": RewardTermCfg(
+            func=ur.tracking_lin_vel, weight=1.0,
+            params={"command_name": "twist", "sigma": 0.4},
+        ),
+        "tracking_ang_vel": RewardTermCfg(
+            func=ur.tracking_ang_vel, weight=0.2,
+            params={"command_name": "twist", "sigma": 0.4},
+        ),
+        "lin_vel_z": RewardTermCfg(func=go2_mdp.lin_vel_z, weight=-5.0),
+        "ang_vel_xy": RewardTermCfg(func=ur.ang_vel_xy, weight=-0.1),
+        "base_height": RewardTermCfg(
+            func=go2_mdp.base_height, weight=-20.0,
+            params={"target_height": 0.3},
+        ),
+        "action_rate": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.02),
+        "similar_to_default": RewardTermCfg(func=ur.similar_to_default, weight=-0.4),
+        "swing_feet_z": RewardTermCfg(
+            func=ur.swing_feet_z, weight=4.0,
+            params={
+                "target_height": 0.1,
+                "asset_cfg": SceneEntityCfg("robot", site_names=foot_site_names),
+            },
+        ),
+        "contact": RewardTermCfg(
+            func=ur.contact_schedule, weight=1.5,
+            params={"sensor_name": "feet_ground_contact"},
+        ),
+    }
+
+    # Observations -> match UniLab go2_joystick_flat EXACTLY (same terms, order,
+    # dims, noise). actor (49): [gyro(3), -gravity(3), dof_diff(12), dof_vel(12),
+    # last_action(12), command(3), feet_phase(4)].  critic (52): actor + lin_vel(3).
+    actor_obs = {
+        "base_ang_vel": ObservationTermCfg(
+            func=mdp.builtin_sensor, params={"sensor_name": "robot/imu_ang_vel"},
+        ),
+        "projected_gravity": ObservationTermCfg(func=mdp.projected_gravity),
+        "joint_pos": ObservationTermCfg(
+            func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01),
+        ),
+        "joint_vel": ObservationTermCfg(
+            func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.1, n_max=0.1),
+        ),
+        "actions": ObservationTermCfg(func=mdp.last_action),
+        "command": ObservationTermCfg(
+            func=mdp.generated_commands, params={"command_name": "twist"},
+        ),
+        "feet_phase": ObservationTermCfg(func=ur.feet_phase_obs),
+    }
+    cfg.observations["actor"].terms = dict(actor_obs)
+    cfg.observations["actor"].enable_corruption = True
+    cfg.observations["critic"].terms = {
+        **actor_obs,
+        "base_lin_vel": ObservationTermCfg(
+            func=mdp.builtin_sensor, params={"sensor_name": "robot/imu_lin_vel"},
+        ),
+    }
+    cfg.observations["critic"].enable_corruption = True
+
+    # Disable command curriculum -> fixed ranges like UniLab (no curriculum).
+    cfg.curriculum = {}
+
+    # Commands -> UniLab ranges (vx[-0.6,1.0], vy[-0.4,0.4], vyaw[-0.8,0.8]).
+    twist_cmd = cfg.commands["twist"]
+    assert isinstance(twist_cmd, UniformVelocityCommandCfg)
+    twist_cmd.ranges.lin_vel_x = (-0.6, 1.0)
+    twist_cmd.ranges.lin_vel_y = (-0.4, 0.4)
+    twist_cmd.ranges.ang_vel_z = (-0.8, 0.8)
+
+    # Episode length (UniLab go2 joystick).
+    cfg.episode_length_s = 20.0
+
+    if play:
+        twist_cmd.ranges.lin_vel_x = (-0.6, 1.0)
+        twist_cmd.ranges.lin_vel_y = (-0.4, 0.4)
+        twist_cmd.ranges.ang_vel_z = (-0.8, 0.8)
 
     return cfg

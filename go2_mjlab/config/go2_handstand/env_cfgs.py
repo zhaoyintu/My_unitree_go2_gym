@@ -445,3 +445,37 @@ def unitree_go2_handstand_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         decimation=4,
         episode_length_s=20.0,
     )
+
+
+def unitree_go2_handstand_finetune_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+    """Stage-2 energy finetune of the Go2 handstand task.
+
+    Ports the mujoco_playground Go1Handstand two-stage recipe (see
+    `go1_finetune_report.html`): stage 1 learns the skill with pure task
+    rewards; stage 2 restores the stage-1 checkpoint and adds mechanical
+    cost terms so that hopping/jitter — previously free — gets priced
+    out, while the task reward keeps the learned pose:
+
+      * ``energy``  -0.003  — sum |qvel_i| * |tau_i| (playground value;
+        both frameworks multiply reward terms by dt, so the weight
+        transfers directly).
+      * ``dof_acc`` -6.25e-4 — playground finetunes with -2.5e-7 on
+        sum(qacc^2); our `joint_acceleration` measures per-policy-step
+        delta-qvel = qacc * 0.02 s, so the equivalent weight is
+        -2.5e-7 / 0.02^2 = -6.25e-4 (2.5x the stage-1 -2.5e-4).
+
+    Expect the playground V-curve: reward drops hard at restore (the old
+    behaviour pays the new energy bill), then recovers within a few
+    hundred iterations with a calmer policy.  Train via resume — the
+    finetune runner cfg keeps ``experiment_name="go2_handstand"`` and
+    loads the stage-1 checkpoint.
+    """
+    cfg = unitree_go2_handstand_env_cfg(play=play)
+
+    cfg.rewards["energy"] = RewardTermCfg(
+        func=go2_mdp.energy, weight=-0.003,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    )
+    cfg.rewards["dof_acc"].weight = -6.25e-4
+
+    return cfg

@@ -16,3 +16,6 @@ venv/
 
 logs/
 wandb/
+
+# Generated eval/render videos
+videos/
