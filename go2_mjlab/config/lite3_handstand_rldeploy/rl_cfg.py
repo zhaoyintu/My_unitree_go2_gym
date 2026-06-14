@@ -354,3 +354,62 @@ def unitree_lite3_handstand_rldeploy_robotlab_minimal_amp_stand_v2_ppo_runner_cf
     cfg.experiment_name = "lite3_handstand_rldeploy_robotlab_minimal_amp_stand_v2"
     cfg.run_name = "minimal_amp_stand_v2"
     return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg():
+    """GaitLock-V2 runner: warm-start the GaitLock checkpoint, finetune with the
+    knee over-fold penalty (obs unchanged 470-dim). Logs under the GaitLock
+    experiment with run_name gaitlock_v2; 3000 finetune iters."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_ppo_runner_cfg()
+    cfg.run_name = "gaitlock_v2"
+    cfg.resume = True
+    cfg.load_run = "2026-06-13_09-17-53_phaseclock_gaitlock"
+    cfg.load_checkpoint = "model_7800.pt"
+    cfg.max_iterations = 3_000
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_ppo_runner_cfg():
+    """GaitLock-2Hz runner: warm-start the GaitLock-V2 checkpoint, retime to the
+    0.5 s (2 Hz) gait clock; run_name gaitlock_2hz, 3000 iters."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg()
+    cfg.run_name = "gaitlock_2hz"
+    cfg.load_run = "2026-06-13_14-18-40_gaitlock_v2"
+    cfg.load_checkpoint = "model_8900.pt"
+    cfg.max_iterations = 3_000
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_ppo_runner_cfg():
+    """GaitLock-V3 runner: warm-start GaitLock-V2, finetune with the stronger
+    contact_schedule (weight 5.0); run_name gaitlock_v3, 3000 iters."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg()
+    cfg.run_name = "gaitlock_v3"
+    cfg.load_run = "2026-06-13_14-18-40_gaitlock_v2"
+    cfg.load_checkpoint = "model_10100.pt"
+    cfg.max_iterations = 3_000
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_ppo_runner_cfg():
+    """GaitLock-V3-LowLift10 runner: warm-start the stable V2-final checkpoint
+    (~4 Hz, knee-safe) and finetune with the apex capped at 10 cm; run_name
+    gaitlock_v3_lowlift10, 3000 iters. Obs unchanged (470-dim)."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg()
+    cfg.run_name = "gaitlock_v3_lowlift10"
+    cfg.load_run = "2026-06-13_14-18-40_gaitlock_v2"
+    cfg.load_checkpoint = "model_10799.pt"
+    cfg.max_iterations = 3_000
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_ppo_runner_cfg():
+    """GaitLock-V3-LowLift5 runner: warm-start the stable V2-final checkpoint and
+    finetune with the apex capped at 5 cm; run_name gaitlock_v3_lowlift5, 3000
+    iters. Obs unchanged (470-dim)."""
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg()
+    cfg.run_name = "gaitlock_v3_lowlift5"
+    cfg.load_run = "2026-06-13_14-18-40_gaitlock_v2"
+    cfg.load_checkpoint = "model_10799.pt"
+    cfg.max_iterations = 3_000
+    return cfg

@@ -71,6 +71,11 @@ from go2_mjlab.config.lite3_handstand_rldeploy.env_cfgs import (
     unitree_lite3_handstand_rldeploy_robotlab_minimal_amp_stand_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_minimal_amp_stand_v2_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_env_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_env_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_env_cfg,
@@ -109,6 +114,11 @@ from go2_mjlab.config.lite3_handstand_rldeploy.rl_cfg import (
     unitree_lite3_handstand_rldeploy_robotlab_minimal_amp_stand_resume_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_minimal_amp_stand_v2_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_ppo_runner_cfg,
+    unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_step_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_quiet_zero_stance_ppo_runner_cfg,
     unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_zero_stance_ppo_runner_cfg,
@@ -508,6 +518,49 @@ register_mjlab_task(
     env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_env_cfg(play=False),
     play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_env_cfg(play=True),
     rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_ppo_runner_cfg(),
+)
+
+# GaitLock-V2: + knee over-fold penalty (front knees were folding to the 2.79 rad
+# limit, pressing thigh+shank together — a hardware self-collision). Warm-starts GaitLock.
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-NoHop-BigStep-Stride-V15-PhaseClock-GaitLock-V2",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_ppo_runner_cfg(),
+)
+
+# GaitLock-2Hz: V2 + gait clock 1.0->0.5s (design step freq 1Hz->2Hz/foot), to pull
+# the actual ~3.9Hz cadence down toward the (more achievable) 2Hz. Warm-starts V2.
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-NoHop-BigStep-Stride-V15-PhaseClock-GaitLock-2Hz",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_ppo_runner_cfg(),
+)
+
+# GaitLock-V3: V2 + stronger contact_schedule (2.0->5.0) to enforce the 1Hz cadence
+# and pull the actual step frequency down (the 2Hz/faster-clock attempt backfired).
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-NoHop-BigStep-Stride-V15-PhaseClock-GaitLock-V3",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_ppo_runner_cfg(),
+)
+
+# GaitLock-V3-LowLift10: keep ~4Hz cadence but CAP swing apex at ~10cm (tent reward).
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-NoHop-BigStep-Stride-V15-PhaseClock-GaitLock-V3-LowLift10",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_ppo_runner_cfg(),
+)
+
+# GaitLock-V3-LowLift5: same but CAP swing apex at ~5cm — low, fast (~4Hz) small steps.
+register_mjlab_task(
+    "Mjlab-Lite3-Handstand-RLDeploy-RobotLab-LowDefaultPose-NoHop-BigStep-Stride-V15-PhaseClock-GaitLock-V3-LowLift5",
+    env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_env_cfg(play=False),
+    play_env_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_env_cfg(play=True),
+    rl_cfg=unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_ppo_runner_cfg(),
 )
 
 # RobotLab task variant for isolating the effect of removing default-pose shaping

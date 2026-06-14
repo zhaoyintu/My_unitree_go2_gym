@@ -1310,6 +1310,7 @@ def handstand_swing_foot_height_linear(
     command_name: str | None = None,
     moving_threshold: float = 0.1,
     target_height: float = 0.08,
+    overshoot_slope: float = 0.0,
 ) -> torch.Tensor:
     """Linear-with-cap swing-foot height reward (no sinusoidal target).
 
@@ -1323,6 +1324,15 @@ def handstand_swing_foot_height_linear(
     The reward goes to 0 when the foot is on the ground and grows linearly
     with height up to the cap, so the policy cannot satisfy it without
     actually lifting the foot.
+
+    ``overshoot_slope`` (default 0 = old behavior): when > 0, subtract
+    ``overshoot_slope * relu(z / cap_height - 1)`` from the per-foot score,
+    turning the saturating ramp into a TENT that peaks exactly at
+    ``cap_height`` and goes NEGATIVE above it. Use this to actively cap the
+    swing apex at ``cap_height`` (otherwise the foot floats above the cap
+    for balance, since the plain ramp gives no gradient past the cap). The
+    zero-crossing is at ``z = (1 + 1/slope) * cap_height`` (e.g. slope=6 ->
+    apex tolerated to ~1.17x cap before the swing reward turns negative).
     """
     asset: Entity = env.scene[asset_cfg.name]
     contact_sensor: ContactSensor = env.scene[sensor_name]
@@ -1335,6 +1345,9 @@ def handstand_swing_foot_height_linear(
     in_air = (~contact[:, list(foot_indices)]).float()
 
     height_score = torch.clamp(selected_z / cap_height, min=0.0, max=1.0)
+    if overshoot_slope > 0.0:
+        overshoot = torch.clamp(selected_z / cap_height - 1.0, min=0.0)
+        height_score = height_score - overshoot_slope * overshoot
     rew = (height_score * in_air).sum(dim=1)
 
     quality = _handstand_quality(env, target_height)
@@ -1557,3 +1570,23 @@ def handstand_contact_schedule(
     quality = _handstand_quality(env, target_height)
     moving_mask = _handstand_moving_command_mask(env, command_name, moving_threshold)
     return match * (quality > 0.70).float() * moving_mask
+
+
+def knee_overfold_penalty(
+    env: "ManagerBasedRlEnv",
+    asset_cfg: SceneEntityCfg,
+    threshold: float = 2.4,
+) -> torch.Tensor:
+    """Penalize knee joints folding past ``threshold`` (rad), toward the hard
+    limit (Lite3 knee limit ~2.79 rad).
+
+    GaitLock lifts the swing foot by folding the front knee to / past its limit
+    (~3.0 rad under saturated PD), which presses the front THIGH and SHANK links
+    flat together — a real hardware self-collision that the sim hides (the
+    thigh-shank contact pair is excluded).  Returns sum_i relu(knee_i - threshold)
+    (>=0); use a negative weight so the policy lifts the foot via the hip instead
+    of over-folding the knee.  Rear knees (nominal ~1.5 rad) never trigger.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    knee_q = asset.data.joint_pos[:, asset_cfg.joint_ids]
+    return torch.sum(torch.clamp(knee_q - threshold, min=0.0), dim=-1)

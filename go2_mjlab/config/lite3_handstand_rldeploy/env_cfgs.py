@@ -1609,3 +1609,110 @@ def unitree_lite3_handstand_rldeploy_robotlab_minimal_amp_stand_v2_env_cfg(
         if term in base.rewards:
             cfg.rewards[term] = base.rewards[term]
     return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """GaitLock-V2: GaitLock + knee over-fold penalty (anti self-collision).
+
+    GaitLock works (big 20cm alternating steps) but folds the FRONT knees to/past
+    the 2.79 rad joint limit (measured ~3.0 rad), pressing the front thigh+shank
+    links together — a hardware self-collision the sim hides (thigh-shank pair is
+    excluded).  Add ``knee_overfold`` (-2.0): penalize any knee > 2.4 rad so the
+    policy lifts the swing foot via the HIP instead of over-folding the knee.
+    Everything else identical to GaitLock; obs unchanged (470-dim) so it
+    warm-starts the GaitLock checkpoint.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_env_cfg(play=play)
+    cfg.rewards["knee_overfold"] = RewardTermCfg(
+        func=go2_mdp.knee_overfold_penalty,
+        weight=-2.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=(".*_Knee_joint",)),
+            "threshold": 2.4,
+        },
+    )
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_2hz_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """GaitLock-2Hz: GaitLock-V2 (knee-safe) but gait clock cycle 1.0 -> 0.5 s,
+    i.e. design step frequency 1 Hz -> 2 Hz/foot.
+
+    The 1 Hz schedule was only loosely followed (policy stepped ~3.9 Hz,
+    contact_schedule match ~0.34); a 2 Hz target (single-support 0.25 s) is more
+    achievable on two front paws, so the policy should lock closer to the design
+    cadence and bring the actual step frequency down toward 2 Hz.  Keeps V2's
+    knee over-fold penalty.  Warm-starts the V2 checkpoint (obs dim unchanged;
+    the gait_clock just ticks 2x faster, and contact_schedule now wants 2 Hz).
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_env_cfg(play=play)
+    CYCLE = 0.5
+    for grp in ("actor", "critic"):
+        if "gait_clock" in cfg.observations[grp].terms:
+            cfg.observations[grp].terms["gait_clock"].params["cycle_time"] = CYCLE
+    if "contact_schedule" in cfg.rewards:
+        cfg.rewards["contact_schedule"].params["cycle_time"] = CYCLE
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """GaitLock-V3: V2 (knee-safe, 1 Hz design) + STRONGER contact_schedule
+    (weight 2.0 -> 5.0) to enforce the slow cadence and pull the actual step
+    frequency DOWN toward the 1 Hz design.
+
+    V2 stepped ~3.9 Hz with contact_schedule match only ~0.35 — the schedule
+    wasn't enforced tightly, so the policy added extra touchdowns within each
+    cycle. (The 2 Hz/faster-clock attempt backfired: faster clock -> faster
+    steps 4.6 Hz + knee over-fold returned.) The correct lever at the SAME 1 Hz
+    clock is a heavier contact_schedule penalty so the policy HOLDS the stance
+    half-cycle. Keeps V2's knee penalty; cycle stays 1.0 s; warm-starts V2.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v2_env_cfg(play=play)
+    if "contact_schedule" in cfg.rewards:
+        cfg.rewards["contact_schedule"].weight = 5.0
+    return cfg
+
+
+def _apply_lowlift_cap(cfg: ManagerBasedRlEnvCfg, cap_height: float, overshoot_slope: float = 6.0) -> None:
+    """Cap the swing-foot apex at ``cap_height`` by turning the swing_foot_height
+    ramp into a TENT (peaks at cap, negative above). See
+    ``handstand_swing_foot_height_linear``'s ``overshoot_slope``."""
+    sw = cfg.rewards["swing_foot_height"].params
+    sw["cap_height"] = cap_height
+    sw["overshoot_slope"] = overshoot_slope
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift10_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """GaitLock-V3-LowLift10: keep V3 (~4 Hz cadence, knee-safe, strong
+    contact_schedule) but CAP the swing-foot apex at ~10 cm.
+
+    V3 floats to ~11 cm apex / ~17 cm excursion because swing_foot_height
+    SATURATES at its 0.12 m cap without penalizing overshoot, so the foot
+    drifts above the cap for free. Lower cap_height to 0.10 and add
+    overshoot_slope=6.0 so the per-foot reward PEAKS at 10 cm and goes
+    negative above — pinning the apex near 10 cm. Everything else = V3; obs
+    unchanged (470-dim) so it warm-starts the stable V2-final checkpoint.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_env_cfg(play=play)
+    _apply_lowlift_cap(cfg, cap_height=0.10)
+    return cfg
+
+
+def unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_lowlift5_env_cfg(
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """GaitLock-V3-LowLift5: same as LowLift10 but CAP the swing-foot apex at
+    ~5 cm (cap_height 0.05, overshoot_slope 6.0). The low, fast (~4 Hz) gait
+    variant — small alternating front-paw steps. Warm-starts V2-final.
+    """
+    cfg = unitree_lite3_handstand_rldeploy_robotlab_low_default_pose_no_hop_big_step_stride_v15_phaseclock_gaitlock_v3_env_cfg(play=play)
+    _apply_lowlift_cap(cfg, cap_height=0.05)
+    return cfg
